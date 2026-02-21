@@ -1,18 +1,71 @@
-# Salesforce DX Project: Next Steps
+# Salesforce Document Generation Platform (Open Source)
 
-Now that you’ve created a Salesforce DX project, what’s next? Here are some documentation resources to get you started.
+Welcome to the **Salesforce Document Generation Platform**, a powerful, native, and completely free solution for generating documents directly within your Salesforce org. 
 
-## How Do You Plan to Deploy Your Changes?
+> [!IMPORTANT]
+> This is the **first iteration (v0.1.0)** of the platform. It is fully open-source and ready for production use, but we welcome contributions and feedback to make it even better.
 
-Do you want to deploy a set of changes, or create a self-contained application? Choose a [development model](https://developer.salesforce.com/tools/vscode/en/user-guide/development-models).
+## Why this exists?
+Normally, document generation in Salesforce is expensive. We believe that basic document needs should be accessible to everyone. This project gives you a professional-grade document engine—which others charge heavily for—entirely for free.
 
-## Configure Your Salesforce DX Project
+---
 
-The `sfdx-project.json` file contains useful configuration information for your project. See [Salesforce DX Project Configuration](https://developer.salesforce.com/docs/atlas.en-us.sfdx_dev.meta/sfdx_dev/sfdx_dev_ws_config.htm) in the _Salesforce DX Developer Guide_ for details about this file.
+## 🚀 Quick Install (2GP Unlocked Package)
 
-## Read All About It
+You can install the latest stable version (0.1.0-2) of the platform using the following command:
 
-- [Salesforce Extensions Documentation](https://developer.salesforce.com/tools/vscode/)
-- [Salesforce CLI Setup Guide](https://developer.salesforce.com/docs/atlas.en-us.sfdx_setup.meta/sfdx_setup/sfdx_setup_intro.htm)
-- [Salesforce DX Developer Guide](https://developer.salesforce.com/docs/atlas.en-us.sfdx_dev.meta/sfdx_dev/sfdx_dev_intro.htm)
-- [Salesforce CLI Command Reference](https://developer.salesforce.com/docs/atlas.en-us.sfdx_cli_reference.meta/sfdx_cli_reference/cli_reference.htm)
+```bash
+sf package install --package 04tdL000000NnUfQAK --wait 10 --installation-key-bypass
+```
+
+**Subscriber Package Version ID**: `04tdL000000NnUfQAK`  
+**Installation URL**: [Click here to install](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tdL000000NnUfQAK)
+
+---
+
+## 🧩 Core Components
+
+### 1. Template Manager
+The **Template Manager** is your central hub for creating and managing document templates. 
+- **Access**: Navigate to the **DocGen Template Manager** tab.
+- **Features**: 
+    - Upload `.docx` or `.pptx` files.
+    - Build SOQL queries using the built-in Query Builder.
+    - Manage template versions and metadata.
+    - Test generation with a sample record directly from the manager.
+
+### 2. Record Page Generator (LWC)
+Add the document generation capability to any standard or custom object record page.
+- **Access**: Edit any Lightning Record Page and add the **docGenRunner** component.
+- **Functionality**: Users can select a template available for that specific object and generate a PDF or PowerPoint document in one click.
+
+### 3. Bulk Document Generation
+Need to generate documents for hundreds of records at once?
+- **Access**: Navigate to the **DocGen Bulk Gen** tab.
+- **Features**: 
+    - Filter records using an intuitive UI.
+    - Track progress in real-time with a dynamic progress bar.
+    - Documents are processed in the background and attached to the records automatically.
+
+### 4. Invocable Flow Action
+Automate document generation as part of your business processes.
+- **Developer Name**: `Generate Document (Native)`
+- **Class**: `DocGenFlowAction`
+- **Usage**: Use this in any Salesforce Flow (Screen or Autolaunched) to generate a document when a specific event occurs (e.g., when an Opportunity is Closed Won).
+
+---
+
+## 🛠 Prerequisites & Setup
+1. **Assign Permissions**: Assign the `DocGen Admin` or `DocGen User` permission set to yourself and your users.
+2. **Assign the App**: Ensure users have access to the **DocGen** Lightning App.
+3. **Files Access**: The platform uses standard Salesforce Files. Ensure users have the proper permissions to create ContentDocuments.
+
+---
+
+## 🤝 Contributing
+This is an open-source project. We encourage you to fork this repository, submit pull requests, and report issues. Let's build the best free document engine for Salesforce together!
+
+---
+
+## 📄 License
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

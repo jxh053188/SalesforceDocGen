@@ -1,0 +1,124 @@
+<apex:page showHeader="false" sidebar="false" standardStylesheets="false">
+    <html>
+    <head>
+        <title>DocGen PDF Engine</title>
+        <!-- Load Libraries from Static Resources -->
+        <script src="{!URLFOR($Resource.DocGenEngine, 'html2pdf.js')}"></script>
+        <style>
+            /* Critical CSS for formatting */
+            body {
+                font-family: 'Arial', sans-serif;
+                margin: 0;
+                padding: 20px;
+                background: white;
+            }
+            
+            /* Page Break Rules */
+            /* Page Break Rules - Relaxed */
+            table, tr, td, th {
+                page-break-inside: avoid !important;
+            }
+            
+            h1, h2, h3, h4 {
+                page-break-after: avoid !important;
+            }
+            
+            /* Print Media Query */
+            @media print {
+                body {
+                    margin: 0;
+                    padding: 0;
+                }
+                .page-break {
+                    page-break-before: always;
+                }
+            }
+        
+        /* OVERRIDES for docx-preview internal structure */
+        .docx-wrapper { 
+            padding: 0 !important; 
+            margin: 0 !important; 
+            background: transparent !important; 
+        }
+        section.docx-render { 
+            margin: 0 !important; 
+            padding: 0 !important; 
+        }
+    </style>
+</head>
+    <body>
+        <!-- Standard Letter Width: 816px. Padding creates margins. -->
+        <div id="content-zone" style="display:none; width: 816px; margin: 0; background: white; padding: 0; box-sizing: border-box;"></div>
+        
+        <!-- DOCX Preview for High Fidelity Rendering -->
+        <script src="{!URLFOR($Resource.DocGenEngine, 'jszip.min.js')}"></script>
+        <script src="{!URLFOR($Resource.DocGenEngine, 'docx-preview.js')}"></script>
+        
+        <script>
+            // Listen for messages from LWC
+            window.addEventListener('message', async function(event) {
+                const data = event.data;
+                if (data.type === 'generate') {
+                    console.log('PDF Engine: Received generation request', data.fileName);
+                    
+                    try {
+                        // docx-preview takes a Blob or ArrayBuffer
+                        const blob = new Blob([data.blob], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+                        
+                        const container = document.getElementById('content-zone');
+                        container.innerHTML = ''; // Clear previous
+                        container.style.display = 'block';
+                        
+                        // docx-preview renderAsync(document, element, styleContainer, options)
+                        console.log('PDF Engine: Rendering DOCX via docx-preview...');
+                        
+                        const renderOptions = {
+                            className: 'docx_viewer', 
+                            inWrapper: false, 
+                            ignoreWidth: true, // Force fit to container width
+                            ignoreHeight: false, 
+                            experimental: true
+                        };
+                        
+                        await docx.renderAsync(blob, container, null, renderOptions);
+                        
+                        console.log('PDF Engine: DOCX Rendered. converting to PDF...');
+                        
+                        // Small delay to ensure rendering is complete (fonts, etc)
+                        setTimeout(() => {
+                             const opt = {
+                                 margin:       0,
+                                 filename:     data.fileName + '.pdf',
+                                 image:        { type: 'jpeg', quality: 0.98 },
+                                 html2canvas:  { scale: 2, useCORS: true, letterRendering: true },
+                                 jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' },
+                                 pagebreak:    { mode: ['css', 'legacy'] } 
+                             };
+                             
+                             html2pdf().from(container).set(opt).save().then(() => {
+                                 console.log('PDF Engine: Download triggered.');
+                                 sendSuccess();
+                             }).catch(err => {
+                                 console.error(err);
+                                 sendError('PDF Generation Failed: ' + err.message);
+                             });
+                        }, 1000); // 1s wait for render
+                        
+                    } catch (e) {
+                         console.error('Render Error', e);
+                         sendError('Render Error: ' + e.message);
+                    }
+                }
+            });
+
+            function sendError(msg) {
+                window.parent.postMessage({ type: 'docgen_error', message: msg }, '*');
+            }
+
+            function sendSuccess() {
+                window.parent.postMessage({ type: 'docgen_success' }, '*');
+            }
+        </script>
+    </body>
+    </html>
+</apex:page>

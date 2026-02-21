@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomApplication xmlns="http://soap.sforce.com/2006/04/metadata">
+    <description>Document Generation Platform</description>
+    <formFactors>Large</formFactors>
+    <isNavAutoTempTabsDisabled>false</isNavAutoTempTabsDisabled>
+    <isNavPersonalizationDisabled>false</isNavPersonalizationDisabled>
+    <isNavTabPersistenceDisabled>false</isNavTabPersistenceDisabled>
+    <isOmniPinnedViewEnabled>false</isOmniPinnedViewEnabled>
+    <label>DocGen</label>
+    <navType>Standard</navType>
+    <tabs>DocGen_Template_Manager</tabs>
+    <tabs>DocGen_Template__c</tabs>
+    <tabs>DocGen_Bulk_Gen</tabs>
+    <tabs>DocGen_Template_Version__c</tabs>
+    <tabs>DocGen_Job__c</tabs>
+    <uiType>Lightning</uiType>
+</CustomApplication>

@@ -1,0 +1,37 @@
+@media print {
+    /* Hide everything by default */
+    body * {
+        visibility: hidden;
+    }
+    
+    /* Only show the preview container and its children */
+    .debug-container, .debug-container * {
+        visibility: visible;
+    }
+    
+    /* Position the preview container at the top left */
+    .debug-container {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        margin: 0;
+        padding: 0;
+        border: none !important;
+    }
+
+    /* Hide the parent card/container styling if needed */
+    lightning-card, .slds-card {
+        display: none;
+    }
+}
+
+/* UI Styling for Preview Box */
+.debug-container {
+    background: white; 
+    padding: 2rem; 
+    border: 1px solid #c9c9c9; 
+    min-height: 200px;
+    margin-top: 1rem;
+    box-shadow: 0 2px 4px 0 rgba(0,0,0,0.16);
+}

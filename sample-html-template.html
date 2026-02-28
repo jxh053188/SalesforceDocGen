@@ -1,11 +1,15 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Record Summary – {{Name}}</title>
   <style>
-    * { box-sizing: border-box; }
+    * {
+      box-sizing: border-box;
+    }
+
     body {
       font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
       line-height: 1.5;
@@ -15,13 +19,15 @@
       padding: 2rem;
       background: #f8f9fa;
     }
+
     .card {
       background: #fff;
       border-radius: 12px;
-      box-shadow: 0 2px 12px rgba(0,0,0,.08);
+      box-shadow: 0 2px 12px rgba(0, 0, 0, .08);
       overflow: hidden;
       margin-bottom: 1.5rem;
     }
+
     .card-header {
       background: linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%);
       color: #fff;
@@ -29,19 +35,28 @@
       font-size: 1.25rem;
       font-weight: 600;
     }
-    .card-body { padding: 1.5rem; }
+
+    .card-body {
+      padding: 1.5rem;
+    }
+
     .row {
       display: flex;
       flex-wrap: wrap;
       gap: 1rem;
       margin-bottom: 1rem;
     }
-    .row:last-child { margin-bottom: 0; }
+
+    .row:last-child {
+      margin-bottom: 0;
+    }
+
     .field {
       flex: 1 1 200px;
       padding: .5rem 0;
       border-bottom: 1px solid #eee;
     }
+
     .field-label {
       font-size: .75rem;
       text-transform: uppercase;
@@ -49,7 +64,11 @@
       color: #6c757d;
       margin-bottom: .25rem;
     }
-    .field-value { font-weight: 500; }
+
+    .field-value {
+      font-weight: 500;
+    }
+
     .section-title {
       font-size: .875rem;
       font-weight: 600;
@@ -58,23 +77,34 @@
       padding-bottom: .35rem;
       border-bottom: 2px solid #0d6efd;
     }
-    .section-title:first-child { margin-top: 0; }
+
+    .section-title:first-child {
+      margin-top: 0;
+    }
+
     table {
       width: 100%;
       border-collapse: collapse;
       font-size: .9rem;
     }
-    th, td {
+
+    th,
+    td {
       padding: .6rem .75rem;
       text-align: left;
       border-bottom: 1px solid #dee2e6;
     }
+
     th {
       background: #f1f3f5;
       font-weight: 600;
       color: #495057;
     }
-    tr:hover td { background: #f8f9fa; }
+
+    tr:hover td {
+      background: #f8f9fa;
+    }
+
     .badge {
       display: inline-block;
       padding: .25rem .5rem;
@@ -82,9 +112,22 @@
       font-size: .75rem;
       font-weight: 600;
     }
-    .badge-success { background: #d1e7dd; color: #0f5132; }
-    .badge-warning { background: #fff3cd; color: #664d03; }
-    .badge-info { background: #cff4fc; color: #055160; }
+
+    .badge-success {
+      background: #d1e7dd;
+      color: #0f5132;
+    }
+
+    .badge-warning {
+      background: #fff3cd;
+      color: #664d03;
+    }
+
+    .badge-info {
+      background: #cff4fc;
+      color: #055160;
+    }
+
     .footer {
       margin-top: 2rem;
       padding-top: 1rem;
@@ -92,9 +135,13 @@
       font-size: .8rem;
       color: #6c757d;
     }
-    .muted { color: #6c757d; }
+
+    .muted {
+      color: #6c757d;
+    }
   </style>
 </head>
+
 <body>
   <div class="card">
     <div class="card-header">Record Summary – {{Name}}</div>
@@ -115,7 +162,7 @@
         </div>
       </div>
 
-      {{#if Opportunities}}
+      {{#ifList Opportunities "count" "Subscription_Amount__c" ">" 500}}
       <div class="section-title">Related Opportunities</div>
       <table>
         <thead>
@@ -135,7 +182,7 @@
           {{/each}}
         </tbody>
       </table>
-      {{/if}}
+      {{/ifList}}
     </div>
   </div>
 
@@ -143,4 +190,5 @@
     Generated from DocGen.
   </div>
 </body>
+
 </html>

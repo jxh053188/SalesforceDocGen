@@ -126,7 +126,7 @@ export default class DocGenQueryNode extends LightningElement {
     get isFilterable() {
         // Base object might have filters, children too. Prents usually don't have filters in SELECT Lookups,
         // (You can't filter a parent lookup, you filter the base).
-        return this.localConfig.type !== 'parent';
+        return this.localConfig.type === 'child';
     }
 
     get isRemovable() {

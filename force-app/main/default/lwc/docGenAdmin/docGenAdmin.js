@@ -230,6 +230,20 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         else if (this.currentWizardStep === '2') this.currentWizardStep = '1';
     }
 
+    resetForm() {
+        this.currentWizardStep = '1';
+        this.newTemplateName = '';
+        this.newTemplateCategory = '';
+        this.newTemplateType = 'Word';
+        this.newTemplateOutputFormat = 'PDF';
+        this.newTemplateObject = 'Account';
+        this.newTemplateDesc = '';
+        this.newTemplateQuery = '';
+        this.newTemplateMetadata = '';
+        this.isCreating = true;
+        this.createdTemplateId = null;
+    }
+
     handleWizardTabActive(event) {
         this.activeMainTab = 'new_template';
         this.resetForm();

@@ -74,23 +74,16 @@
                             pagebreak:    { mode: ['css', 'legacy'] }
                         };
                         const worker = html2pdf().from(container).set(opt);
-                        if (data.mode === 'save') {
-                            worker.output('arraybuffer').then(function(buffer) {
-                                console.log('PDF Engine: Blob generated for saving.');
-                                sendSuccess(buffer, data.fileName);
-                            }).catch(function(err) {
-                                console.error(err);
-                                sendError('PDF Blob Generation Failed: ' + err.message);
-                            });
-                        } else {
-                            worker.save().then(function() {
-                                console.log('PDF Engine: Download triggered.');
-                                sendSuccess();
-                            }).catch(function(err) {
-                                console.error(err);
-                                sendError('PDF Generation Failed: ' + err.message);
-                            });
-                        }
+                        
+                        // We always want to return the ArrayBuffer now so the LWC can decide what to do
+                        // if data.mode === 'returnBuffer' or 'save'
+                        worker.output('arraybuffer').then(function(buffer) {
+                            console.log('PDF Engine: Blob generated for LWC utility.');
+                            sendSuccess(buffer, data.fileName);
+                        }).catch(function(err) {
+                            console.error(err);
+                            sendError('PDF Blob Generation Failed: ' + err.message);
+                        });
                     }
 
                     try {

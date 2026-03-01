@@ -29,6 +29,8 @@ import PIZZIP_JS from '@salesforce/resourceUrl/pizzip';
 import DOCXTEMPLATER_JS from '@salesforce/resourceUrl/docxtemplater';
 import FILESAVER_JS from '@salesforce/resourceUrl/filesaver';
 import HANDLEBARS_JS from '@salesforce/resourceUrl/handlebars';
+import { generatePdfFromIframe } from 'c/docGenPdfUtils';
+import DocGenPreviewModal from 'c/docGenPreviewModal';
 
 const COLUMNS = [
     { label: 'Category', fieldName: 'Category__c', initialWidth: 150 },
@@ -623,9 +625,17 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         return !this.editTemplateTestRecordId;
     }
 
+    async handleTestPreview() {
+        console.log('DEBUG: handleTestPreview called');
+        await this._runTestGenerationFlow(true);
+    }
+
     async handleTestGenerate() {
         console.log('DEBUG: handleTestGenerate (Generate Sample) called');
+        await this._runTestGenerationFlow(false);
+    }
 
+    async _runTestGenerationFlow(isPreview) {
         if (!this.editTemplateTestRecordId) {
             this.showToast('Warning', 'Please select a Test Record ID first.', 'warning');
             return;
@@ -792,145 +802,128 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                         this.showToast('Error', 'PDF Engine not found in DOM.', 'error');
                         return;
                     }
-                    iframe.contentWindow.postMessage({
+
+                    const messageData = {
                         type: 'generate',
                         html: renderedHtml,
                         fileName: baseName
-                    }, '*');
+                    };
+
+                    const pdfBlob = await generatePdfFromIframe(iframe, messageData);
+                    await this._handleTestPdfBlobResult(pdfBlob, baseName, isPreview);
+
                 } else {
-                    // Use application/octet-stream so FileSaver/LWS accepts the blob (filename .html still opens as HTML)
                     const blob = new Blob([renderedHtml], { type: 'application/octet-stream' });
-                    window.saveAs(blob, baseName + '.html');
-                    this.showToast('Success', 'Sample HTML Downloaded', 'success');
+                    if (isPreview) {
+                        this.showToast('Warning', 'Preview is only supported for PDF output. Downloading instead.', 'warning');
+                        window.saveAs(blob, baseName + '.html');
+                    } else {
+                        window.saveAs(blob, baseName + '.html');
+                        this.showToast('Success', 'Sample HTML document downloaded.', 'success');
+                    }
                 }
-                this.isLoadingVersions = false;
                 return;
             }
 
-            // 5. PizZip (Word/PowerPoint)
-            console.log('DEBUG: PizZip Loading...');
-            let zip;
-            try {
-                const binaryString = atob(templateData);
-                const len = binaryString.length;
-                const bytes = new Uint8Array(len);
-                for (let i = 0; i < len; i++) {
-                    bytes[i] = binaryString.charCodeAt(i);
-                }
-                zip = new window.PizZip(bytes.buffer);
-            } catch (zipErr) {
-                throw new Error('PizZip Load Failed: ' + zipErr.message);
+            if (!window.PizZip || !window.docxtemplater) {
+                this.showToast('Error', 'Required libraries not loaded.', 'error');
+                return;
             }
 
-            // 6. Docxtemplater
-            console.log('DEBUG: Docxtemplater Init...');
-            let doc;
-            try {
-                doc = new window.docxtemplater(zip, {
-                    paragraphLoop: true,
-                    linebreaks: true,
-                    nullGetter: (part) => {
-                        if (!part.module || part.module === "rawxml") return "";
-                        return "";
-                    },
-                    parser: (tag) => {
-                        return {
-                            get: (scope, context) => {
-                                if (tag === '.') return scope;
-                                const keys = tag.split('.');
-                                let value = scope;
-                                for (let i = 0; i < keys.length; i++) {
-                                    if (value === undefined || value === null) return '';
-                                    const key = keys[i];
-                                    if (Object.prototype.hasOwnProperty.call(value, key)) {
-                                        value = value[key];
-                                    } else {
-                                        const lowerKey = key.toLowerCase();
-                                        const matchedKey = Object.keys(value).find(k => k.toLowerCase() === lowerKey);
-                                        if (matchedKey) {
-                                            value = value[matchedKey];
-                                        } else {
-                                            return '';
-                                        }
-                                    }
-                                }
-                                return value;
+            const binaryString = this.base64ToUtf8String(templateData);
+            const bytes = new Uint8Array(binaryString.length);
+            for (let i = 0; i < binaryString.length; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+
+            const zip = new window.PizZip(bytes.buffer);
+            const doc = new window.docxtemplater(zip, {
+                paragraphLoop: true,
+                linebreaks: true,
+                delimiters: { start: '{', end: '}' },
+                nullGetter: () => { return ''; },
+                parser: (tag) => {
+                    return {
+                        get: (scope) => {
+                            if (tag === '.') return scope;
+                            const keys = tag.split('.');
+                            let value = scope;
+                            for (let i = 0; i < keys.length; i++) {
+                                if (value === undefined || value === null) return '';
+                                value = value[keys[i]];
                             }
-                        };
-                    }
-                });
-            } catch (dtErr) {
-                console.error('DT Init Error:', dtErr);
-                let msg = dtErr.message;
-                if (msg.includes('The filetype for this file could not be identified')) {
-                    msg = 'The uploaded file is not a valid Zip file (e.g. .docx or .pptx). Please re-upload the template file.';
+                            return value;
+                        }
+                    };
                 }
-                throw new Error('Docxtemplater Init Failed: ' + msg);
-            }
+            });
 
-            // 7. Render
-            console.log('DEBUG: Rendering...');
-            try {
-                doc.render(recordData);
-            } catch (renderErr) {
-                console.error('Render Error:', renderErr);
-                throw renderErr;
-            }
+            doc.render(recordData);
 
-            // 8. Output
-            console.log('DEBUG: Outputting. TemplateType:', templateType);
-            const isPPT = ['PowerPoint', 'PPT', 'PPTX'].includes(templateType);
-            const downloadMime = 'application/octet-stream';
+            const isPPT = templateType === 'PowerPoint';
+            const isPDF = this.editTemplateOutputFormat === 'PDF' && !isPPT;
 
-            let outZip;
-            try {
-                outZip = doc.getZip().generate({
-                    type: 'uint8array'
-                });
-            } catch (genErr) {
-                console.error('Zip Generate Error:', genErr);
-                throw new Error('Zip Generation Failed: ' + genErr.message);
-            }
-
-            if (isPPT || this.editTemplateOutputFormat === 'Native') {
-                // Forces browser to treat as generic file
-                const out = new Blob([outZip], { type: downloadMime });
-                window.saveAs(out, baseName + (isPPT ? '.pptx' : '.docx'));
-                this.showToast('Success', 'Sample Document Downloaded', 'success');
+            if (isPPT) {
+                const outBlob = doc.getZip().generate({ type: 'blob' });
+                if (isPreview) {
+                    this.showToast('Warning', 'Preview is only supported for PDF output. Downloading instead.', 'warning');
+                    window.saveAs(outBlob, baseName + '.pptx');
+                } else {
+                    window.saveAs(outBlob, baseName + '.pptx');
+                    this.showToast('Success', 'Sample PowerPoint downloaded.', 'success');
+                }
+            } else if (!isPDF) {
+                const outBlob = doc.getZip().generate({ type: 'blob' });
+                if (isPreview) {
+                    this.showToast('Warning', 'Preview is only supported for PDF output. Downloading instead.', 'warning');
+                    window.saveAs(outBlob, baseName + '.docx');
+                } else {
+                    window.saveAs(outBlob, baseName + '.docx');
+                    this.showToast('Success', 'Sample Word document downloaded.', 'success');
+                }
             } else {
-                // PDF
                 this.showToast('Info', 'Generating PDF Sample...', 'info');
-
                 const docxBuffer = doc.getZip().generate({ type: 'arraybuffer' });
-
                 const iframe = this.template.querySelector('iframe');
                 if (!iframe) {
                     this.showToast('Error', 'PDF Engine not found in DOM.', 'error');
                     return;
                 }
 
-                iframe.contentWindow.postMessage({
+                const messageData = {
                     type: 'generate',
                     blob: docxBuffer,
                     fileName: baseName
-                }, '*');
+                };
+
+                const pdfBlob = await generatePdfFromIframe(iframe, messageData);
+                await this._handleTestPdfBlobResult(pdfBlob, baseName, isPreview);
             }
 
         } catch (error) {
-            console.error('handleTestGenerate Error:', error);
-            let technicalMsg = error.message || 'Unknown error';
-            let userMsg = 'Generation Failed. ';
-
-            if (technicalMsg.includes('PizZip')) {
-                userMsg += 'We had trouble reading the file format. Please ensure you uploaded a valid .docx or .pptx file.';
-            } else if (technicalMsg.includes('Docxtemplater')) {
-                userMsg += 'The template structure is invalid or the file is corrupted. ' + technicalMsg;
-            } else {
-                userMsg += technicalMsg;
-            }
-
-            this.showToast('Generation Failed', userMsg, 'error');
+            console.error('Test Generation Error:', error);
+            this.showToast('Generation Error', error.message || error, 'error');
         } finally {
+            this.isLoadingVersions = false;
+        }
+    }
+
+    async _handleTestPdfBlobResult(pdfBlob, baseName, isPreview) {
+        if (!pdfBlob) {
+            this.isLoadingVersions = false;
+            return;
+        }
+
+        if (isPreview) {
+            this.isLoadingVersions = false;
+            await DocGenPreviewModal.open({
+                size: 'large',
+                pdfBlob: pdfBlob,
+                fileName: baseName + '.pdf'
+            });
+        } else {
+            window.saveAs(pdfBlob, baseName + '.pdf');
+            this.showToast('Success', 'Sample PDF downloaded.', 'success');
             this.isLoadingVersions = false;
         }
     }
@@ -1000,5 +993,15 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
 
     get hasDocument() {
         return !!this.currentFileId;
+    }
+
+    showToast(title, message, variant) {
+        this.dispatchEvent(
+            new ShowToastEvent({
+                title: title,
+                message: message,
+                variant: variant
+            })
+        );
     }
 }

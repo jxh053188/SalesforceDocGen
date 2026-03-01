@@ -1,0 +1,23 @@
+<template>
+    <lightning-modal-header title="Document Preview"></lightning-modal-header>
+    <lightning-modal-body>
+        <div class="modal-body-content" style="height: 600px; display: flex; flex-direction: column;">
+            <template if:true={pdfUrl}>
+                <c-pdfjs-viewer viewer-u-r-l="/resource/pdfjs/pdfjs/web/viewer.html" pdf-url={pdfUrl}
+                    file-name={fileName}>
+                </c-pdfjs-viewer>
+            </template>
+            <template if:false={pdfUrl}>
+                <div class="slds-illustration slds-illustration_small slds-m-top_large">
+                    <img src="/img/chatter/OpenRoad.svg" class="slds-illustration__svg" alt="Preview Not Available" />
+                    <h3 class="slds-text-heading_medium slds-m-top_medium">Preview Not Available</h3>
+                </div>
+            </template>
+        </div>
+    </lightning-modal-body>
+    <lightning-modal-footer>
+        <lightning-button label="Close" onclick={handleClose} class="slds-m-right_x-small"></lightning-button>
+        <lightning-button label="Download" variant="brand" onclick={handleDownload}
+            disabled={isDownloadDisabled}></lightning-button>
+    </lightning-modal-footer>
+</template>

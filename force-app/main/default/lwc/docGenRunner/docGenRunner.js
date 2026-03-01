@@ -8,6 +8,8 @@ import PIZZIP_JS from '@salesforce/resourceUrl/pizzip';
 import DOCXTEMPLATER_JS from '@salesforce/resourceUrl/docxtemplater';
 import FILESAVER_JS from '@salesforce/resourceUrl/filesaver';
 import HANDLEBARS_JS from '@salesforce/resourceUrl/handlebars';
+import { generatePdfFromIframe } from 'c/docGenPdfUtils';
+import DocGenPreviewModal from 'c/docGenPreviewModal';
 
 export default class DocGenRunner extends LightningElement {
     @api recordId;
@@ -96,11 +98,19 @@ export default class DocGenRunner extends LightningElement {
     }
 
     async generateDocument() {
+        await this._runGenerationFlow(false);
+    }
+
+    async previewDocument() {
+        await this._runGenerationFlow(true);
+    }
+
+    async _runGenerationFlow(isPreview) {
         this.isLoading = true;
         this.error = null;
 
         try {
-            console.log('DocGen: Starting generation process...');
+            console.log('DocGen: Starting generation process...', isPreview ? 'PREVIEW MODE' : 'NORMAL MODE');
 
             // 0. Ensure Libraries are loaded
             if (this._librariesPromise) {
@@ -247,17 +257,26 @@ export default class DocGenRunner extends LightningElement {
                     this.showToast('Info', 'Generating PDF...', 'info');
                     const iframe = this.template.querySelector('iframe');
                     if (!iframe) throw new Error('PDF Engine iframe not found.');
-                    iframe.contentWindow.postMessage({
+
+                    const messageData = {
                         type: 'generate',
                         html: renderedHtml,
                         fileName: baseName,
                         mode: this.outputMode
-                    }, '*');
+                    };
+
+                    const pdfBlob = await generatePdfFromIframe(iframe, messageData);
+                    await this._handlePdfBlobResult(pdfBlob, baseName, isPreview);
+
                 } else {
                     // Use application/octet-stream so FileSaver/LWS accepts the blob (filename .html still opens as HTML)
                     const blob = new Blob([renderedHtml], { type: 'application/octet-stream' });
-                    if (this.outputMode === 'save') {
+                    if (this.outputMode === 'save' && !isPreview) {
                         await this.saveToSalesforce(baseName, blob, 'html');
+                    } else if (isPreview) {
+                        this.showToast('Warning', 'Preview is only supported for PDF output. Downloading instead.', 'warning');
+                        window.saveAs(blob, baseName + '.html');
+                        this.isLoading = false;
                     } else {
                         window.saveAs(blob, baseName + '.html');
                         this.showToast('Success', 'HTML document downloaded.', 'success');
@@ -311,8 +330,12 @@ export default class DocGenRunner extends LightningElement {
             if (isPPT) {
                 console.log('DocGen: PowerPoint detected. Generating PPTX...');
                 const outBlob = doc.getZip().generate({ type: 'blob' });
-                if (this.outputMode === 'save') {
+                if (this.outputMode === 'save' && !isPreview) {
                     await this.saveToSalesforce(baseName, outBlob, 'pptx');
+                } else if (isPreview) {
+                    this.showToast('Warning', 'Preview is only supported for PDF output. Downloading instead.', 'warning');
+                    window.saveAs(outBlob, baseName + '.pptx');
+                    this.isLoading = false;
                 } else {
                     window.saveAs(outBlob, baseName + '.pptx');
                     this.showToast('Success', 'PowerPoint downloaded.', 'success');
@@ -321,8 +344,12 @@ export default class DocGenRunner extends LightningElement {
             } else if (!isPDF) {
                 console.log('DocGen: Native format detected. Generating DOCX...');
                 const outBlob = doc.getZip().generate({ type: 'blob' });
-                if (this.outputMode === 'save') {
+                if (this.outputMode === 'save' && !isPreview) {
                     await this.saveToSalesforce(baseName, outBlob, 'docx');
+                } else if (isPreview) {
+                    this.showToast('Warning', 'Preview is only supported for PDF output. Downloading instead.', 'warning');
+                    window.saveAs(outBlob, baseName + '.docx');
+                    this.isLoading = false;
                 } else {
                     window.saveAs(outBlob, baseName + '.docx');
                     this.showToast('Success', 'Word document downloaded.', 'success');
@@ -337,12 +364,15 @@ export default class DocGenRunner extends LightningElement {
 
                 if (!iframe) throw new Error('PDF Engine iframe not found.');
 
-                iframe.contentWindow.postMessage({
+                const messageData = {
                     type: 'generate',
                     blob: docxBuffer,
                     fileName: baseName,
                     mode: this.outputMode
-                }, '*');
+                };
+
+                const pdfBlob = await generatePdfFromIframe(iframe, messageData);
+                await this._handlePdfBlobResult(pdfBlob, baseName, isPreview);
             }
 
         } catch (e) {
@@ -365,6 +395,28 @@ export default class DocGenRunner extends LightningElement {
                 msg += ': ' + e.properties.errors.map(err => err.properties.explanation).join(', ');
             }
             this.error = 'Generation Error: ' + msg;
+            this.isLoading = false;
+        }
+    }
+
+    async _handlePdfBlobResult(pdfBlob, baseName, isPreview) {
+        if (!pdfBlob) {
+            this.isLoading = false;
+            return;
+        }
+
+        if (isPreview) {
+            this.isLoading = false;
+            await DocGenPreviewModal.open({
+                size: 'large',
+                pdfBlob: pdfBlob,
+                fileName: baseName + '.pdf'
+            });
+        } else if (this.outputMode === 'save') {
+            await this.saveToSalesforce(baseName, pdfBlob, 'pdf');
+        } else {
+            window.saveAs(pdfBlob, baseName + '.pdf');
+            this.showToast('Success', 'Document Generated successfully.', 'success');
             this.isLoading = false;
         }
     }

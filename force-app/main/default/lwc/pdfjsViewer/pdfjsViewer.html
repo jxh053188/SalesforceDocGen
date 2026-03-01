@@ -1,0 +1,7 @@
+<template>
+    <template lwc:if={showViewer}>
+        <iframe lwc:dom="manual" data-id="pdf-viewer-iframe" src={viewerURL} onload={testPdfViewer}
+            style="width: 100%; height: 600px;">
+        </iframe>
+    </template>
+</template>

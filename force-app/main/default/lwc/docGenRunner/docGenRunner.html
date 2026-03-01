@@ -9,40 +9,32 @@
             </template>
 
             <template lwc:if={isLoading}>
-                 <lightning-spinner alternative-text="Loading" size="medium"></lightning-spinner>
+                <lightning-spinner alternative-text="Loading" size="medium"></lightning-spinner>
             </template>
-            
+
             <template lwc:else>
-                <lightning-combobox
-                    name="template"
-                    label="Select Template"
-                    value={selectedTemplateId}
-                    placeholder="Choose a template..."
-                    options={templateOptions}
-                    onchange={handleTemplateChange}
+                <lightning-combobox name="template" label="Select Template" value={selectedTemplateId}
+                    placeholder="Choose a template..." options={templateOptions} onchange={handleTemplateChange}
                     class="slds-m-bottom_medium">
                 </lightning-combobox>
 
                 <div class="slds-m-bottom_medium">
-                    <lightning-radio-group
-                        name="outputMode"
-                        label="Action"
-                        options={outputOptions}
-                        value={outputMode}
-                        onchange={handleOutputModeChange}
-                        type="button">
+                    <lightning-radio-group name="outputMode" label="Action" options={outputOptions} value={outputMode}
+                        onchange={handleOutputModeChange} type="button">
                     </lightning-radio-group>
                 </div>
 
-                <lightning-button 
-                    variant="brand" 
-                    label="Generate Document" 
-                    onclick={generateDocument} 
-                    disabled={isGenerateDisabled}
-                    class="slds-m-top_medium">
-                </lightning-button>
+                <div class="slds-m-top_medium">
+                    <lightning-button variant="brand" label="Generate Document" onclick={generateDocument}
+                        disabled={isGenerateDisabled} class="slds-m-right_small">
+                    </lightning-button>
+
+                    <lightning-button variant="neutral" label="Preview Document" icon-name="utility:preview"
+                        onclick={previewDocument} disabled={isGenerateDisabled}>
+                    </lightning-button>
+                </div>
             </template>
-            
+
             <!-- Engine Frame (Always Present) -->
             <iframe src={engineUrl} style="width:0;height:0;border:0;position:absolute;"></iframe>
         </div>

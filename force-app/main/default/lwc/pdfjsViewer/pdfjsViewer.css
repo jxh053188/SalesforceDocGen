@@ -1,0 +1,31 @@
+.pdf-viewer-container {
+    min-height: 600px;
+}
+
+.pdf-pages-container {
+    background: #f3f3f3;
+    padding: 20px;
+}
+
+.pdf-page-wrapper {
+    margin-bottom: 20px;
+}
+
+.pdf-page-canvas {
+    display: block;
+    margin: 10px auto;
+    border: 1px solid #ccc;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    background: white;
+}
+
+/* Custom loading container positioning */
+.pdf-loading-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: white;
+    z-index: 1;
+}

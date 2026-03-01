@@ -5,121 +5,111 @@
                 <div class="slds-p-around_medium">
                     <div class="slds-grid slds-grid_vertical-align-end slds-m-bottom_medium">
                         <div class="slds-col slds-size_1-of-3">
-                            <lightning-input 
-                                type="search" 
-                                label="Search Templates" 
-                                placeholder="Search by Name, Category, or Object..." 
-                                value={searchKey} 
+                            <lightning-input type="search" label="Search Templates"
+                                placeholder="Search by Name, Category, or Object..." value={searchKey}
                                 onchange={handleSearch}>
                             </lightning-input>
                         </div>
                         <div class="slds-col slds-p-left_small">
-                            <lightning-button-icon 
-                                icon-name="utility:refresh" 
-                                onclick={handleRefresh} 
-                                alternative-text="Refresh Templates" 
-                                title="Refresh Templates">
+                            <lightning-button-icon icon-name="utility:refresh" onclick={handleRefresh}
+                                alternative-text="Refresh Templates" title="Refresh Templates">
                             </lightning-button-icon>
                         </div>
                     </div>
-                    <lightning-datatable
-                        key-field="Id"
-                        data={filteredTemplates}
-                        columns={columns}
-                        onrowaction={handleRowAction}
-                        hide-checkbox-column>
+                    <lightning-datatable key-field="Id" data={filteredTemplates} columns={columns}
+                        onrowaction={handleRowAction} hide-checkbox-column>
                     </lightning-datatable>
                 </div>
             </lightning-tab>
 
 
-            
-                <lightning-tab label="New Template Wizard" value="new_template" onactive={handleWizardTabActive}>
-                    <div class="slds-p-around_medium">
-                        <lightning-progress-indicator current-step={currentWizardStep} type="base" variant="base">
-                            <lightning-progress-step label="Details" value="1"></lightning-progress-step>
-                            <lightning-progress-step label="Query Config" value="2"></lightning-progress-step>
-                            <lightning-progress-step label="Finish" value="3"></lightning-progress-step>
-                        </lightning-progress-indicator>
-                        
-                        <div class="slds-m-vertical_large">
-                            <!-- Step 1: Details -->
-                            <template if:true={isStep1}>
-                                <div class="slds-grid slds-gutters">
-                                    <div class="slds-col slds-size_1-of-2">
-                                        <lightning-input label="Template Name" value={newTemplateName} onchange={handleNameChange} required></lightning-input>
-                                        <lightning-input label="Category" value={newTemplateCategory} onchange={handleCategoryChange} class="slds-m-top_small"></lightning-input>
-                                    </div>
-                                    <div class="slds-col slds-size_1-of-2">
-                                        <lightning-combobox label="Type" value={newTemplateType} options={typeOptions} onchange={handleTypeChange} required></lightning-combobox>
-                                        <lightning-combobox label="Output Format" value={newTemplateOutputFormat} options={outputFormatOptions} onchange={handleOutputFormatChange} class="slds-m-top_small" required></lightning-combobox>
-                                        <lightning-textarea label="Description" value={newTemplateDesc} onchange={handleDescChange} class="slds-m-top_small"></lightning-textarea>
-                                    </div>
-                                </div>
-                            </template>
 
-                            <!-- Step 2: Query Builder -->
-                            <template if:true={isStep2}>
-                                <div class="slds-m-bottom_medium slds-p-around_small slds-theme_info slds-border_around">
-                                    <h3 class="slds-text-heading_small slds-m-bottom_xx-small">
-                                        <lightning-icon icon-name="utility:info" size="x-small" class="slds-m-right_x-small" variant="info"></lightning-icon>
-                                        How to build your query
-                                    </h3>
-                                    <p class="slds-text-body_small">
-                                        Select the <strong>Base Object</strong> first. Then, pick the fields you want to include in your document. 
-                                        You can also add <strong>Parent Fields</strong> (e.g., Account Name from a Contact) or <strong>Child Lists</strong> (e.g., Contacts from an Account) to create complex documents.
-                                    </p>
-                                    <p class="slds-text-body_small slds-m-top_small slds-text-color_weak">
-                                        <strong>Performance Tip:</strong> Avoid selecting "All Fields" if possible to keep generation fast.
-                                    </p>
-                                </div>
-                                <c-doc-gen-query-builder 
-                                    selected-object={newTemplateObject} 
-                                    query-config={newTemplateQuery}
-                                    onconfigchange={handleConfigChange}>
-                                </c-doc-gen-query-builder>
-                            </template>
+            <lightning-tab label="New Template Wizard" value="new_template" onactive={handleWizardTabActive}>
+                <div class="slds-p-around_medium">
+                    <lightning-progress-indicator current-step={currentWizardStep} type="base" variant="base">
+                        <lightning-progress-step label="Details" value="1"></lightning-progress-step>
+                        <lightning-progress-step label="Query Config" value="2"></lightning-progress-step>
+                        <lightning-progress-step label="Finish" value="3"></lightning-progress-step>
+                    </lightning-progress-indicator>
 
-                            <!-- Step 3: Review & Create -->
-                            <template if:true={isStep3}>
-                                <div class="slds-box slds-theme_shade">
-                                    <h3 class="slds-text-heading_small">Review Template</h3>
-                                    <p class="slds-m-top_small"><strong>Name:</strong> {newTemplateName}</p>
-                                    <p><strong>Object:</strong> {newTemplateObject}</p>
-                                    <p><strong>Query:</strong> {newTemplateQuery}</p>
-                                    <p class="slds-m-top_medium">Click "Create Template" to save.</p>
+                    <div class="slds-m-vertical_large">
+                        <!-- Step 1: Details -->
+                        <template if:true={isStep1}>
+                            <div class="slds-grid slds-gutters">
+                                <div class="slds-col slds-size_1-of-2">
+                                    <lightning-input label="Template Name" value={newTemplateName}
+                                        onchange={handleNameChange} required></lightning-input>
+                                    <lightning-input label="Category" value={newTemplateCategory}
+                                        onchange={handleCategoryChange} class="slds-m-top_small"></lightning-input>
                                 </div>
-                            </template>
-                        </div>
-
-                        <!-- Footer Navigation -->
-                        <div class="slds-clearfix">
-                            <div class="slds-float_right">
-                                <lightning-button 
-                                    label="Back" 
-                                    onclick={handlePrevStep} 
-                                    disabled={isBackDisabled} 
-                                    class="slds-m-right_small">
-                                </lightning-button>
-                                
-                                <template if:false={isStep3}>
-                                    <lightning-button 
-                                        label="Next" 
-                                        variant="brand" 
-                                        onclick={handleNextStep}>
-                                    </lightning-button>
-                                </template>
-                                <template if:true={isStep3}>
-                                    <lightning-button 
-                                        label="Create Template" 
-                                        variant="success" 
-                                        onclick={createTemplate}>
-                                    </lightning-button>
-                                </template>
+                                <div class="slds-col slds-size_1-of-2">
+                                    <lightning-combobox label="Type" value={newTemplateType} options={typeOptions}
+                                        onchange={handleTypeChange} required></lightning-combobox>
+                                    <lightning-combobox label="Output Format" value={newTemplateOutputFormat}
+                                        options={outputFormatOptions} onchange={handleOutputFormatChange}
+                                        class="slds-m-top_small" required></lightning-combobox>
+                                    <lightning-textarea label="Description" value={newTemplateDesc}
+                                        onchange={handleDescChange} class="slds-m-top_small"></lightning-textarea>
+                                </div>
                             </div>
+                        </template>
+
+                        <!-- Step 2: Query Builder -->
+                        <template if:true={isStep2}>
+                            <div class="slds-m-bottom_medium slds-p-around_small slds-theme_info slds-border_around">
+                                <h3 class="slds-text-heading_small slds-m-bottom_xx-small">
+                                    <lightning-icon icon-name="utility:info" size="x-small" class="slds-m-right_x-small"
+                                        variant="info"></lightning-icon>
+                                    How to build your query
+                                </h3>
+                                <p class="slds-text-body_small">
+                                    Select the <strong>Base Object</strong> first. Then, pick the fields you want to
+                                    include in your document.
+                                    You can also add <strong>Parent Fields</strong> (e.g., Account Name from a Contact)
+                                    or <strong>Child Lists</strong> (e.g., Contacts from an Account) to create complex
+                                    documents.
+                                </p>
+                                <p class="slds-text-body_small slds-m-top_small slds-text-color_weak">
+                                    <strong>Performance Tip:</strong> Avoid selecting "All Fields" if possible to keep
+                                    generation fast.
+                                </p>
+                            </div>
+                            <c-doc-gen-query-builder selected-object={newTemplateObject} query-config={newTemplateQuery}
+                                onconfigchange={handleConfigChange}>
+                            </c-doc-gen-query-builder>
+                        </template>
+
+                        <!-- Step 3: Review & Create -->
+                        <template if:true={isStep3}>
+                            <div class="slds-box slds-theme_shade">
+                                <h3 class="slds-text-heading_small">Review Template</h3>
+                                <p class="slds-m-top_small"><strong>Name:</strong> {newTemplateName}</p>
+                                <p><strong>Object:</strong> {newTemplateObject}</p>
+                                <p><strong>Query:</strong> {newTemplateQuery}</p>
+                                <p class="slds-m-top_medium">Click "Create Template" to save.</p>
+                            </div>
+                        </template>
+                    </div>
+
+                    <!-- Footer Navigation -->
+                    <div class="slds-clearfix">
+                        <div class="slds-float_right">
+                            <lightning-button label="Back" onclick={handlePrevStep} disabled={isBackDisabled}
+                                class="slds-m-right_small">
+                            </lightning-button>
+
+                            <template if:false={isStep3}>
+                                <lightning-button label="Next" variant="brand" onclick={handleNextStep}>
+                                </lightning-button>
+                            </template>
+                            <template if:true={isStep3}>
+                                <lightning-button label="Create Template" variant="success" onclick={createTemplate}>
+                                </lightning-button>
+                            </template>
                         </div>
                     </div>
-                </lightning-tab>
+                </div>
+            </lightning-tab>
         </lightning-tabset>
     </lightning-card>
 
@@ -127,7 +117,8 @@
     <template if:true={showInstallSample}>
         <div class="slds-m-around_medium slds-text-align_center">
             <p class="slds-m-bottom_small">No templates found.</p>
-            <lightning-button label="Install Sample Data" onclick={handleInstallSample} variant="brand"></lightning-button>
+            <lightning-button label="Install Sample Data" onclick={handleInstallSample}
+                variant="brand"></lightning-button>
         </div>
     </template>
 
@@ -136,8 +127,10 @@
         <section role="dialog" tabindex="-1" class="slds-modal slds-fade-in-open slds-modal_large">
             <div class="slds-modal__container">
                 <header class="slds-modal__header">
-                    <button class="slds-button slds-button_icon slds-modal__close slds-button_icon-inverse" title="Close" onclick={closeEditModal}>
-                        <lightning-icon icon-name="utility:close" alternative-text="close" variant="inverse" size="small"></lightning-icon>
+                    <button class="slds-button slds-button_icon slds-modal__close slds-button_icon-inverse"
+                        title="Close" onclick={closeEditModal}>
+                        <lightning-icon icon-name="utility:close" alternative-text="close" variant="inverse"
+                            size="small"></lightning-icon>
                     </button>
                     <h2 class="slds-text-heading_medium slds-hyphenate">Edit / View Template</h2>
                 </header>
@@ -147,65 +140,66 @@
                         <lightning-tab label="Settings" value="details" onactive={handleEditTabChange}>
                             <div class="slds-grid slds-gutters">
                                 <div class="slds-col slds-size_1-of-2">
-                                    <lightning-input label="Template Name" value={editTemplateName} onchange={handleEditNameChange} required></lightning-input>
-                                    <lightning-input label="Category" value={editTemplateCategory} onchange={handleEditCategoryChange} class="slds-m-top_small"></lightning-input>
+                                    <lightning-input label="Template Name" value={editTemplateName}
+                                        onchange={handleEditNameChange} required></lightning-input>
+                                    <lightning-input label="Category" value={editTemplateCategory}
+                                        onchange={handleEditCategoryChange} class="slds-m-top_small"></lightning-input>
                                 </div>
                                 <div class="slds-col slds-size_1-of-2">
-                                    <lightning-combobox label="Type" value={editTemplateType} options={typeOptions} onchange={handleEditTypeChange} required></lightning-combobox>
-                                    <lightning-combobox label="Output Format" value={editTemplateOutputFormat} options={outputFormatOptions} onchange={handleEditOutputFormatChange} class="slds-m-top_small" required></lightning-combobox>
-                                    <lightning-input label="Base Object API Name" value={editTemplateObject} readonly class="slds-m-top_small"></lightning-input>
-                                    
-                                    <c-doc-gen-title-editor
-                                        value={editTemplateTitleFormat}
-                                        query-config={editTemplateQuery}
-                                        onchange={handleTitleFormatChange}
+                                    <lightning-combobox label="Type" value={editTemplateType} options={typeOptions}
+                                        onchange={handleEditTypeChange} required></lightning-combobox>
+                                    <lightning-combobox label="Output Format" value={editTemplateOutputFormat}
+                                        options={outputFormatOptions} onchange={handleEditOutputFormatChange}
+                                        class="slds-m-top_small" required></lightning-combobox>
+                                    <lightning-input label="Base Object API Name" value={editTemplateObject} readonly
+                                        class="slds-m-top_small"></lightning-input>
+
+                                    <c-doc-gen-title-editor value={editTemplateTitleFormat}
+                                        query-config={editTemplateQuery} onchange={handleTitleFormatChange}
                                         class="slds-m-top_small slds-d-block">
                                     </c-doc-gen-title-editor>
                                 </div>
                             </div>
-                            <lightning-textarea label="Description" value={editTemplateDesc} onchange={handleEditDescChange} class="slds-m-top_small"></lightning-textarea>
+                            <lightning-textarea label="Description" value={editTemplateDesc}
+                                onchange={handleEditDescChange} class="slds-m-top_small"></lightning-textarea>
                         </lightning-tab>
 
                         <!-- Tab 2: Query Configuration -->
                         <lightning-tab label="Query Configuration" value="query" onactive={handleEditTabChange}>
-                             <!-- Header Control -->
-                             <div class="slds-grid slds-grid_align-spread slds-m-bottom_small">
-                                 <div class="slds-col">
-                                     <p class="slds-text-body_small slds-text-color_weak">
-                                         Configure the data query for this template.
-                                     </p>
-                                 </div>
-                                 <div class="slds-col">
-                                     <lightning-input type="toggle" 
-                                        label="Manual Query Mode" 
-                                        checked={isManualQuery} 
-                                        onchange={handleManualQueryToggle} 
-                                        message-toggle-active="Manual" 
+                            <!-- Header Control -->
+                            <div class="slds-grid slds-grid_align-spread slds-m-bottom_small">
+                                <div class="slds-col">
+                                    <p class="slds-text-body_small slds-text-color_weak">
+                                        Configure the data query for this template.
+                                    </p>
+                                </div>
+                                <div class="slds-col">
+                                    <lightning-input type="toggle" label="Manual Query Mode" checked={isManualQuery}
+                                        onchange={handleManualQueryToggle} message-toggle-active="Manual"
                                         message-toggle-inactive="Builder">
-                                     </lightning-input>
-                                 </div>
-                             </div>
+                                    </lightning-input>
+                                </div>
+                            </div>
 
-                             <!-- Builder Mode: builder lives below tabset so it stays in DOM when user switches tabs and clicks Save -->
-                             <template if:false={isManualQuery}>
-                                <p class="slds-text-body_small slds-text-color_weak">Configure fields and child relationships in the section below.</p>
-                             </template>
+                            <!-- Builder Mode: builder lives below tabset so it stays in DOM when user switches tabs and clicks Save -->
+                            <template if:false={isManualQuery}>
+                                <p class="slds-text-body_small slds-text-color_weak">Configure fields and child
+                                    relationships in the section below.</p>
+                            </template>
 
-                             <!-- Manual Mode -->
-                             <template if:true={isManualQuery}>
-                                 <div class="slds-box slds-theme_shade">
-                                     <lightning-textarea 
-                                        label="SOQL Query Fields" 
-                                        value={editTemplateQuery} 
-                                        onchange={handleQueryStringChange}
-                                        class="slds-text-font_monospace"
+                            <!-- Manual Mode -->
+                            <template if:true={isManualQuery}>
+                                <div class="slds-box slds-theme_shade">
+                                    <lightning-textarea label="SOQL Query Fields" value={editTemplateQuery}
+                                        onchange={handleQueryStringChange} class="slds-text-font_monospace"
                                         style="min-height: 200px;">
-                                     </lightning-textarea>
-                                     <p class="slds-text-body_small slds-m-top_x-small">
-                                         Enter comma-separated fields or subqueries. Example: <code>Name, Industry, (SELECT LastName FROM Contacts)</code>
-                                     </p>
-                                 </div>
-                             </template>
+                                    </lightning-textarea>
+                                    <p class="slds-text-body_small slds-m-top_x-small">
+                                        Enter comma-separated fields or subqueries. Example:
+                                        <code>Name, Industry, (SELECT LastName FROM Contacts)</code>
+                                    </p>
+                                </div>
+                            </template>
                         </lightning-tab>
 
                         <!-- Tab 3: Template Tags (Dynamic Header) -->
@@ -215,111 +209,104 @@
                                     <h3 class="slds-text-heading_small">{editTemplateObject} Fields</h3>
                                 </div>
                                 <div class="slds-col">
-                                    <lightning-record-picker
-                                        label="Test Record"
-                                        variant="label-hidden"
-                                        object-api-name={editTemplateObject}
-                                        value={editTemplateTestRecordId}
-                                        onchange={handleEditTestRecordChange}
-                                        placeholder="Search test record..."
-                                        disabled={isCreating}> 
+                                    <lightning-record-picker label="Test Record" variant="label-hidden"
+                                        object-api-name={editTemplateObject} value={editTemplateTestRecordId}
+                                        onchange={handleEditTestRecordChange} placeholder="Search test record..."
+                                        disabled={isCreating}>
                                     </lightning-record-picker>
                                     <p class="slds-text-body_small slds-text-color_weak slds-m-top_xx-small">
                                         Current ID: {editTemplateTestRecordId}
                                     </p>
                                 </div>
                             </div>
-                             <c-doc-gen-query-builder
-                                selected-object={editTemplateObject}
-                                query-config={editTemplateQuery} 
-                                show-tags-only="true"
+                            <c-doc-gen-query-builder selected-object={editTemplateObject}
+                                query-config={editTemplateQuery} show-tags-only="true"
                                 test-record-id={editTemplateTestRecordId}>
                             </c-doc-gen-query-builder>
                         </lightning-tab>
 
                         <!-- Tab 4: Document & History -->
                         <lightning-tab label="Document & History" value="document" onactive={handleEditTabChange}>
-                             <div class="slds-m-top_medium">
+                            <div class="slds-m-top_medium">
                                 <!-- Current File Section -->
                                 <article class="slds-card slds-m-bottom_medium slds-theme_shade">
-                                     <div class="slds-card__header slds-grid">
-                                         <header class="slds-media slds-media_center slds-has-flexi-truncate">
-                                             <div class="slds-media__figure">
-                                                 <lightning-icon icon-name="doctype:word" size="small"></lightning-icon>
-                                             </div>
-                                             <div class="slds-media__body">
-                                                 <h2 class="slds-card__header-title">
-                                                     <span class="slds-text-heading_small">Current Template File</span>
-                                                     <template if:true={currentFileId}>
-                                                         <lightning-badge label="Active" class="slds-m-left_small slds-theme_success"></lightning-badge>
-                                                         <template if:true={currentVersionLabel}>
-                                                             <lightning-badge label={currentVersionLabel} class="slds-m-left_x-small slds-theme_info"></lightning-badge>
-                                                         </template>
-                                                     </template>
-                                                 </h2>
-                                             </div>
-                                         </header>
-                                          <div class="slds-no-flex">
-                                              <template if:true={currentFileId}>
-                                                  <lightning-button label="Download Current" icon-name="utility:download" onclick={downloadTemplate}></lightning-button>
-                                              </template>
-                                          </div>
-                                     </div>
-                                     <div class="slds-card__body slds-card__body_inner">
-                                         <lightning-file-upload
-                                            label="Upload New Version"
-                                            name="fileUploaderEdit"
-                                            accept={acceptedFormats}
-                                            record-id={editTemplateId}
+                                    <div class="slds-card__header slds-grid">
+                                        <header class="slds-media slds-media_center slds-has-flexi-truncate">
+                                            <div class="slds-media__figure">
+                                                <lightning-icon icon-name="doctype:word" size="small"></lightning-icon>
+                                            </div>
+                                            <div class="slds-media__body">
+                                                <h2 class="slds-card__header-title">
+                                                    <span class="slds-text-heading_small">Current Template File</span>
+                                                    <template if:true={currentFileId}>
+                                                        <lightning-badge label="Active"
+                                                            class="slds-m-left_small slds-theme_success"></lightning-badge>
+                                                        <template if:true={currentVersionLabel}>
+                                                            <lightning-badge label={currentVersionLabel}
+                                                                class="slds-m-left_x-small slds-theme_info"></lightning-badge>
+                                                        </template>
+                                                    </template>
+                                                </h2>
+                                            </div>
+                                        </header>
+                                        <div class="slds-no-flex">
+                                            <template if:true={currentFileId}>
+                                                <lightning-button label="Download Current" icon-name="utility:download"
+                                                    onclick={downloadTemplate}></lightning-button>
+                                            </template>
+                                        </div>
+                                    </div>
+                                    <div class="slds-card__body slds-card__body_inner">
+                                        <lightning-file-upload label="Upload New Version" name="fileUploaderEdit"
+                                            accept={acceptedFormats} record-id={editTemplateId}
                                             onuploadfinished={handleEditUploadFinished}>
                                         </lightning-file-upload>
-                                        
+
                                         <template if:true={uploadedFileName}>
                                             <div class="slds-box slds-box_xx-small slds-theme_success slds-m-top_small">
-                                                <lightning-icon icon-name="utility:check" size="xx-small" class="slds-m-right_x-small" variant="inverse"></lightning-icon>
+                                                <lightning-icon icon-name="utility:check" size="xx-small"
+                                                    class="slds-m-right_x-small" variant="inverse"></lightning-icon>
                                                 <strong>Ready to Save:</strong> {uploadedFileName}
                                             </div>
                                         </template>
-                                        
-                                        <p class="slds-text-body_small slds-m-top_x-small"><strong>Note:</strong> Uploading attaches the file. You must click <strong>"Save New Version"</strong> below to create a new Version Snapshot.</p>
-                                     </div>
-                                 </article>
+
+                                        <p class="slds-text-body_small slds-m-top_x-small"><strong>Note:</strong>
+                                            Uploading attaches the file. You must click <strong>"Save New
+                                                Version"</strong> below to create a new Version Snapshot.</p>
+                                    </div>
+                                </article>
 
                                 <!-- Version History -->
                                 <div class="slds-m-top_large">
                                     <h3 class="slds-text-heading_small slds-m-bottom_medium">Version History</h3>
-                                    
+
                                     <template if:false={hasVersions}>
-                                         <div class="slds-text-color_weak slds-p-around_medium slds-text-align_center">
-                                             <p>No versions available yet.</p>
-                                             <p class="slds-text-body_small">Upload a file and save to create v1.</p>
-                                         </div>
+                                        <div class="slds-text-color_weak slds-p-around_medium slds-text-align_center">
+                                            <p>No versions available yet.</p>
+                                            <p class="slds-text-body_small">Upload a file and save to create v1.</p>
+                                        </div>
                                     </template>
 
                                     <template if:true={hasVersions}>
-                                        <div class="slds-m-bottom_small slds-p-around_small slds-theme_info slds-border_around">
-                                            <lightning-icon icon-name="utility:info" size="x-small" class="slds-m-right_x-small"></lightning-icon>
+                                        <div
+                                            class="slds-m-bottom_small slds-p-around_small slds-theme_info slds-border_around">
+                                            <lightning-icon icon-name="utility:info" size="x-small"
+                                                class="slds-m-right_x-small"></lightning-icon>
                                             Restoring a version will activate its configuration immediately.
                                         </div>
                                         <div style="height: 300px;">
-                                            <lightning-datatable
-                                                key-field="Id"
-                                                data={versions}
-                                                columns={versionColumns}
-                                                onrowaction={handleRestoreVersion}
-                                                hide-checkbox-column>
+                                            <lightning-datatable key-field="Id" data={versions} columns={versionColumns}
+                                                onrowaction={handleRestoreVersion} hide-checkbox-column>
                                             </lightning-datatable>
                                         </div>
                                     </template>
                                 </div>
-                             </div>
+                            </div>
                         </lightning-tab>
                     </lightning-tabset>
                     <!-- Single query builder outside tabset so it is always in DOM when modal is open (required for Save to read current state) -->
                     <div class={queryBuilderSectionClass}>
-                        <c-doc-gen-query-builder
-                            selected-object={editTemplateObject}
-                            query-config={editTemplateQuery}
+                        <c-doc-gen-query-builder selected-object={editTemplateObject} query-config={editTemplateQuery}
                             onconfigchange={handleEditConfigChange}>
                         </c-doc-gen-query-builder>
                     </div>
@@ -327,13 +314,21 @@
                 <!-- Footer with Renamed Buttons -->
                 <footer class="slds-modal__footer">
                     <div class="slds-grid slds-grid_align-spread">
-                        <div class="slds-col">
-                            <lightning-button label="Generate Sample Document" icon-name="utility:download" title="Generate real sample document" onclick={handleTestGenerate} disabled={editTemplateTestRecordIdEmpty}></lightning-button>
+                        <div class="slds-col slds-grid">
+                            <lightning-button label="Preview Sample Document" icon-name="utility:preview"
+                                title="Preview real sample document in browser" onclick={handleTestPreview}
+                                disabled={editTemplateTestRecordIdEmpty} class="slds-m-right_small"></lightning-button>
+                            <lightning-button label="Generate Sample Document" icon-name="utility:download"
+                                title="Generate real sample document" onclick={handleTestGenerate}
+                                disabled={editTemplateTestRecordIdEmpty}></lightning-button>
                         </div>
                         <div class="slds-col">
-                           <lightning-button variant="neutral" label="Cancel" onclick={closeEditModal}></lightning-button>
-                           <lightning-button variant="brand" label="Save Details" onclick={handleSaveOnly} class="slds-m-left_small"></lightning-button>
-                           <lightning-button variant="brand-outline" label="Save as New Version" onclick={handleSaveAndClose} class="slds-m-left_small"></lightning-button>
+                            <lightning-button variant="neutral" label="Cancel"
+                                onclick={closeEditModal}></lightning-button>
+                            <lightning-button variant="brand" label="Save Details" onclick={handleSaveOnly}
+                                class="slds-m-left_small"></lightning-button>
+                            <lightning-button variant="brand-outline" label="Save as New Version"
+                                onclick={handleSaveAndClose} class="slds-m-left_small"></lightning-button>
                         </div>
                     </div>
                 </footer>
@@ -341,21 +336,24 @@
         </section>
         <div class="slds-backdrop slds-backdrop_open"></div>
     </template>
-    
+
     <!-- Preview Modal -->
     <template if:true={isPreviewModalOpen}>
         <section role="dialog" tabindex="-1" class="slds-modal slds-fade-in-open slds-modal_small">
             <div class="slds-modal__container">
                 <header class="slds-modal__header">
-                    <button class="slds-button slds-button_icon slds-modal__close slds-button_icon-inverse" title="Close" onclick={closePreviewModal}>
-                        <lightning-icon icon-name="utility:close" alternative-text="close" variant="inverse" size="small"></lightning-icon>
+                    <button class="slds-button slds-button_icon slds-modal__close slds-button_icon-inverse"
+                        title="Close" onclick={closePreviewModal}>
+                        <lightning-icon icon-name="utility:close" alternative-text="close" variant="inverse"
+                            size="small"></lightning-icon>
                     </button>
                     <h2 class="slds-text-heading_medium">Version Preview: {previewVersion.VersionNumber}</h2>
                 </header>
                 <div class="slds-modal__content slds-p-around_medium">
                     <div class="slds-grid slds-gutters slds-m-bottom_medium">
                         <div class="slds-col">
-                            <p><strong>Created:</strong> <lightning-formatted-date-time value={previewVersion.CreatedDate}></lightning-formatted-date-time></p>
+                            <p><strong>Created:</strong> <lightning-formatted-date-time
+                                    value={previewVersion.CreatedDate}></lightning-formatted-date-time></p>
                             <p><strong>By:</strong> {previewVersion.CreatedByName}</p>
                         </div>
                         <div class="slds-col">
@@ -366,21 +364,21 @@
                     <div class="slds-box slds-theme_shade slds-m-bottom_small">
                         <p><strong>Configuration Snapshot:</strong></p>
                     </div>
-                    <c-doc-gen-query-builder
-                        selected-object={previewVersion.Base_Object_API__c}
-                        query-config={previewVersion.Query_Config__c} 
-                        show-tags-only="true"
+                    <c-doc-gen-query-builder selected-object={previewVersion.Base_Object_API__c}
+                        query-config={previewVersion.Query_Config__c} show-tags-only="true"
                         test-record-id={previewVersion.Test_Record_Id__c}>
                     </c-doc-gen-query-builder>
                 </div>
                 <footer class="slds-modal__footer">
-                    <lightning-button label="Close" onclick={closePreviewModal} class="slds-m-right_small"></lightning-button>
+                    <lightning-button label="Close" onclick={closePreviewModal}
+                        class="slds-m-right_small"></lightning-button>
                     <!-- Row ID check in JS handleRestoreVersion if we add data attribute?
                          Actually restore usually works on row. 
                          In handleRestoreVersion I logic'd it out.
                          Wait, I should pass the row to the restore handler if clicked from here.
                     -->
-                    <lightning-button label="Activate This Version" variant="brand" onclick={handleRestoreFromPreview}></lightning-button>
+                    <lightning-button label="Activate This Version" variant="brand"
+                        onclick={handleRestoreFromPreview}></lightning-button>
                 </footer>
             </div>
         </section>
@@ -393,15 +391,15 @@
         <section role="dialog" tabindex="-1" class="slds-modal slds-fade-in-open">
             <div class="slds-modal__container">
                 <header class="slds-modal__header">
-                    <button class="slds-button slds-button_icon slds-modal__close slds-button_icon-inverse" title="Close" onclick={handleCloseSharing}>
-                        <lightning-icon icon-name="utility:close" alternative-text="close" variant="inverse" size="small"></lightning-icon>
+                    <button class="slds-button slds-button_icon slds-modal__close slds-button_icon-inverse"
+                        title="Close" onclick={handleCloseSharing}>
+                        <lightning-icon icon-name="utility:close" alternative-text="close" variant="inverse"
+                            size="small"></lightning-icon>
                     </button>
                     <h2 class="slds-text-heading_medium slds-hyphenate">Share Template</h2>
                 </header>
                 <div class="slds-modal__content slds-p-around_medium">
-                    <c-doc-gen-sharing 
-                        record-id={sharingTemplateId}
-                        onclose={handleCloseSharing}>
+                    <c-doc-gen-sharing record-id={sharingTemplateId} onclose={handleCloseSharing}>
                     </c-doc-gen-sharing>
                 </div>
             </div>
@@ -410,5 +408,6 @@
     </template>
 
     <!-- Hidden PDF Engine: Position absolute/fixed off-screen so access to DOM/Window dimensions works -->
-    <iframe src="/apex/DocGenPDFEngine" style="position:fixed; top:-20000px; left:-20000px; width:1280px; height:1000px; border:none; visibility:hidden;"></iframe>
+    <iframe src="/apex/DocGenPDFEngine"
+        style="position:fixed; top:-20000px; left:-20000px; width:1280px; height:1000px; border:none; visibility:hidden;"></iframe>
 </template>

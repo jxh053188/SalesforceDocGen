@@ -1,0 +1,1 @@
+- [Docx mock creation pattern](docx-mock-pattern.md) — native Compression.ZipWriter pattern for test docx files

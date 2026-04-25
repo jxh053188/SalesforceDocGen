@@ -93,7 +93,7 @@ public without sharing class DocGenSignatureService {
         newCv.IsMajorVersion = true;
         insert newCv;
         
-        Id newDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :newCv.Id].ContentDocumentId;
+        Id newDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :newCv.Id WITH SYSTEM_MODE LIMIT 1].ContentDocumentId;
         
         if (String.isNotBlank(relatedRecordId)) {
             ContentDocumentLink cdl = new ContentDocumentLink();

@@ -47,7 +47,6 @@
     </types>
     <types>
         <members>docGenAdmin</members>
-        <members>docGenBulkRunner</members>
         <members>docGenFilterBuilder</members>
         <members>docGenQueryBuilder</members>
         <members>docGenRunner</members>
@@ -71,7 +70,6 @@
         <members>DocGenSampleDoc</members>
         <members>DocGenSampleOpp</members>
         <members>DocGenSamplePPT</members>
-        <members>DocGen_Bulk_Screen</members>
         <members>DocGen_Manager_Screen</members>
         <members>DocGen_Wizard_Screen</members>
         <members>docxtemplater</members>

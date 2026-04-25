@@ -391,7 +391,8 @@ public with sharing class DocGenController {
         List<SObject> shareRecords = Database.query(
             'SELECT Id, UserOrGroupId, UserOrGroup.Name, AccessLevel, RowCause ' +
             'FROM DocGen_Template__Share ' +
-            'WHERE ParentId = :templateId AND RowCause != \'Owner\''
+            'WHERE ParentId = :templateId AND RowCause != \'Owner\'',
+            AccessLevel.USER_MODE
         );
 
         for (SObject s : shareRecords) {

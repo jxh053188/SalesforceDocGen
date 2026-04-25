@@ -2,6 +2,10 @@ public with sharing class DocGenService {
     
 
     public static Id generateDocument(Id templateId, Id recordId) {
+        return generateDocument(templateId, recordId, false);
+    }
+
+    public static Id generateDocument(Id templateId, Id recordId, Boolean injectDocuSignAnchors) {
         System.debug('Starting DocGen for Template: ' + templateId + ' Record: ' + recordId);
         Map<String, Object> dataMap;
         try {
@@ -14,6 +18,18 @@ public with sharing class DocGenService {
         Object dataObj = dataMap.get('data');
         String outputFormat = (String) dataMap.get('outputFormat'); 
         String templateType = (String) dataMap.get('templateType');
+
+        Map<String, DocGen_DocuSign_Mapping__mdt> anchorMappings = null;
+        if (injectDocuSignAnchors == true && templateType == 'Word') {
+            anchorMappings = new Map<String, DocGen_DocuSign_Mapping__mdt>();
+            for (DocGen_DocuSign_Mapping__mdt m : [
+                SELECT Merge_Field__c, Anchor_Tag__c, Anchor_Type__c, Unique_Suffix_Field__c
+                FROM DocGen_DocuSign_Mapping__mdt
+                WHERE Template_Id__c = :templateId AND Active__c = true
+            ]) {
+                anchorMappings.put(m.Merge_Field__c, m);
+            }
+        }
 
         if (base64File == null) throw new DocGenException('Template file content is missing.');
 
@@ -48,7 +64,7 @@ public with sharing class DocGenService {
             if (isTargetXml) { 
                 Blob content = reader.extract(name);
                 String xml = content.toString();
-                xml = processXml(xml, recordDataMap);
+                xml = processXml(xml, recordDataMap, anchorMappings);
                 writer.addEntry(name, Blob.valueOf(xml));
             } else {
                 writer.addEntry(name, reader.extract(name));
@@ -71,7 +87,8 @@ public with sharing class DocGenService {
     // I can do it in two calls.
 
     
-    private static String processXml(String xml, Map<String, Object> data) {
+    @TestVisible
+    private static String processXml(String xml, Map<String, Object> data, Map<String, DocGen_DocuSign_Mapping__mdt> anchorMappings) {
         String output = '';
         Integer len = xml.length();
         Integer cursor = 0;
@@ -183,22 +200,22 @@ public with sharing class DocGenService {
                     String sectionResult = '';
                     
                     if (val instanceof Boolean && (Boolean)val) {
-                         sectionResult = processXml(innerXml, data);
+                         sectionResult = processXml(innerXml, data, anchorMappings);
                     } else if (val instanceof Map<String, Object>) {
                         Map<String, Object> mapVal = (Map<String, Object>) val;
                          if (mapVal.containsKey('records') && mapVal.get('records') instanceof List<Object>) {
                             for (Object item : (List<Object>) mapVal.get('records')) {
-                                if (item instanceof Map<String, Object>) sectionResult += processXml(innerXml, (Map<String, Object>) item);
+                                if (item instanceof Map<String, Object>) sectionResult += processXml(innerXml, (Map<String, Object>) item, anchorMappings);
                             }
                         } else {
-                             sectionResult = processXml(innerXml, mapVal);
+                             sectionResult = processXml(innerXml, mapVal, anchorMappings);
                         }
                     } else if (val instanceof List<Object>) {
                          for (Object item : (List<Object>) val) {
-                              if (item instanceof Map<String, Object>) sectionResult += processXml(innerXml, (Map<String, Object>) item);
+                              if (item instanceof Map<String, Object>) sectionResult += processXml(innerXml, (Map<String, Object>) item, anchorMappings);
                          }
                     } else if (val != null) {
-                         sectionResult = processXml(innerXml, data);
+                         sectionResult = processXml(innerXml, data, anchorMappings);
                     }
                     output += sectionResult;
                 }
@@ -208,7 +225,21 @@ public with sharing class DocGenService {
                 cursor = tagClose + 1;
             } else {
                 Object val = resolveValue(data, tagContent);
-                if (val != null) output += String.valueOf(val).escapeXml();
+                String resolved = (val != null ? String.valueOf(val).escapeXml() : '');
+
+                if (anchorMappings != null && anchorMappings.containsKey(tagContent)) {
+                    DocGen_DocuSign_Mapping__mdt mapping = anchorMappings.get(tagContent);
+                    String anchor = mapping.Anchor_Tag__c;
+                    if (String.isNotBlank(mapping.Unique_Suffix_Field__c)) {
+                        Object suffixVal = resolveValue(data, mapping.Unique_Suffix_Field__c);
+                        if (suffixVal != null) {
+                            anchor = anchor + '-' + String.valueOf(suffixVal);
+                        }
+                    }
+                    resolved += ' ' + anchor.escapeXml();
+                }
+
+                output += resolved;
                 cursor = tagClose + 1;
             }
         }

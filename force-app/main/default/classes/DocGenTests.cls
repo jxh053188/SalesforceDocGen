@@ -497,6 +497,231 @@ private class DocGenTests {
     }
 
     @isTest
+    static void testGenerateDocumentWordWithAnchorsNoMappings() {
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+        Account acc = [SELECT Id, Name FROM Account LIMIT 1];
+
+        Blob docxBlob = createTestDocx('<w:document><w:body><w:p><w:r><w:t>{Name}</w:t></w:r></w:p></w:body></w:document>');
+        ContentVersion cv = new ContentVersion(
+            Title = 'NoAnchorTemplate',
+            PathOnClient = 'NoAnchorTemplate.docx',
+            VersionData = docxBlob,
+            IsMajorVersion = true
+        );
+        insert cv;
+        Id conDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id].ContentDocumentId;
+        ContentDocumentLink cdl = new ContentDocumentLink(
+            LinkedEntityId = tpl.Id,
+            ContentDocumentId = conDocId,
+            ShareType = 'V'
+        );
+        insert cdl;
+
+        Test.startTest();
+        Id resultDocId = DocGenService.generateDocument(tpl.Id, acc.Id, true);
+        Test.stopTest();
+
+        System.assertNotEquals(null, resultDocId, 'Should return a ContentDocumentId');
+
+        ContentVersion resultCv = [
+            SELECT Id, VersionData
+            FROM ContentVersion
+            WHERE ContentDocumentId = :resultDocId AND IsLatest = true
+            LIMIT 1
+        ];
+
+        Compression.ZipReader reader = new Compression.ZipReader(resultCv.VersionData);
+        String documentXml = reader.extract('word/document.xml').toString();
+        System.assert(documentXml.contains('Test Account'), 'Document should contain merged data when no CMT mappings match');
+    }
+
+    @isTest
+    static void testGenerateDocumentWithAnchors() {
+        Map<String, Object> data = new Map<String, Object>{
+            'Name' => 'Test Account'
+        };
+        Map<String, DocGen_DocuSign_Mapping__mdt> anchorMappings = new Map<String, DocGen_DocuSign_Mapping__mdt>{
+            'Name' => new DocGen_DocuSign_Mapping__mdt(
+                Merge_Field__c = 'Name',
+                Anchor_Tag__c = '/sn1/',
+                Anchor_Type__c = 'Text'
+            )
+        };
+        String xml = '<w:document><w:body><w:p><w:r><w:t>{Name}</w:t></w:r></w:p></w:body></w:document>';
+
+        Test.startTest();
+        String result = DocGenService.processXml(xml, data, anchorMappings);
+        Test.stopTest();
+
+        System.assert(result.contains('/sn1/'), 'Anchor tag should appear in processed XML: ' + result);
+        System.assert(result.contains('Test Account'), 'Document should contain merged data');
+    }
+
+    @isTest
+    static void testGenerateDocumentWithAnchorSuffixInLoop() {
+        Map<String, Object> data = new Map<String, Object>{
+            'Contacts' => new Map<String, Object>{
+                'records' => new List<Object>{
+                    new Map<String, Object>{ 'FirstName' => 'Alice', 'LastName' => 'Smith' },
+                    new Map<String, Object>{ 'FirstName' => 'Bob', 'LastName' => 'Jones' }
+                }
+            }
+        };
+        Map<String, DocGen_DocuSign_Mapping__mdt> anchorMappings = new Map<String, DocGen_DocuSign_Mapping__mdt>{
+            'FirstName' => new DocGen_DocuSign_Mapping__mdt(
+                Merge_Field__c = 'FirstName',
+                Anchor_Tag__c = '/sn1/',
+                Unique_Suffix_Field__c = 'LastName'
+            )
+        };
+        String xml = '<w:document><w:body><w:p><w:r><w:t>{#Contacts}{FirstName}{/Contacts}</w:t></w:r></w:p></w:body></w:document>';
+
+        Test.startTest();
+        String result = DocGenService.processXml(xml, data, anchorMappings);
+        Test.stopTest();
+
+        System.assert(result.contains('/sn1/-Smith'), 'Anchor tag with suffix should appear for Alice: ' + result);
+        System.assert(result.contains('/sn1/-Jones'), 'Anchor tag with suffix should appear for Bob: ' + result);
+        System.assert(result.contains('Alice'), 'Loop content should be merged');
+        System.assert(result.contains('Bob'), 'Loop content should be merged');
+    }
+
+    @isTest
+    static void testGenerateDocumentPowerPointWithAnchors() {
+        Account acc = [SELECT Id, Name FROM Account LIMIT 1];
+
+        DocGen_Template__c tpl = new DocGen_Template__c(
+            Name = 'PPT Template',
+            Base_Object_API__c = 'Account',
+            Query_Config__c = 'Name',
+            Type__c = 'PowerPoint'
+        );
+        insert tpl;
+
+        Compression.ZipWriter writer = new Compression.ZipWriter();
+        writer.addEntry('ppt/slides/slide1.xml', Blob.valueOf(
+            '<p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">' +
+            '<p:sp><p:txBody><a:p><a:r><a:t>{Name}</a:t></a:r></a:p></p:txBody></p:sp></p:sld>'
+        ));
+        writer.addEntry('[Content_Types].xml', Blob.valueOf(
+            '<?xml version="1.0" encoding="UTF-8"?>' +
+            '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+            '<Default Extension="xml" ContentType="application/xml"/>' +
+            '<Override PartName="/ppt/slides/slide1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>' +
+            '</Types>'
+        ));
+        Blob pptxBlob = writer.getArchive();
+
+        ContentVersion cv = new ContentVersion(
+            Title = 'PPTTemplate',
+            PathOnClient = 'PPTTemplate.pptx',
+            VersionData = pptxBlob,
+            IsMajorVersion = true
+        );
+        insert cv;
+        Id conDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id].ContentDocumentId;
+        ContentDocumentLink cdl = new ContentDocumentLink(
+            LinkedEntityId = tpl.Id,
+            ContentDocumentId = conDocId,
+            ShareType = 'V'
+        );
+        insert cdl;
+
+        Test.startTest();
+        Id resultDocId = DocGenService.generateDocument(tpl.Id, acc.Id, true);
+        Test.stopTest();
+
+        System.assertNotEquals(null, resultDocId, 'Should return a ContentDocumentId');
+
+        ContentVersion resultCv = [
+            SELECT Id, VersionData
+            FROM ContentVersion
+            WHERE ContentDocumentId = :resultDocId AND IsLatest = true
+            LIMIT 1
+        ];
+
+        Compression.ZipReader reader = new Compression.ZipReader(resultCv.VersionData);
+        String slideXml = reader.extract('ppt/slides/slide1.xml').toString();
+        System.assert(slideXml.contains('Test Account'), 'Slide should contain merged data');
+    }
+
+    @isTest
+    static void testFlowActionSendForSignature() {
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+        Account acc = [SELECT Id FROM Account LIMIT 1];
+
+        Contact con = new Contact(FirstName = 'Test', LastName = 'Signer', Email = 'signer@example.com', AccountId = acc.Id);
+        insert con;
+
+        Blob docxBlob = createTestDocx('<w:document><w:body><w:p><w:r><w:t>{Name}</w:t></w:r></w:p></w:body></w:document>');
+        ContentVersion cv = new ContentVersion(
+            Title = 'FlowSigTemplate',
+            PathOnClient = 'FlowSigTemplate.docx',
+            VersionData = docxBlob,
+            IsMajorVersion = true
+        );
+        insert cv;
+        Id conDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id].ContentDocumentId;
+        ContentDocumentLink cdl = new ContentDocumentLink(
+            LinkedEntityId = tpl.Id,
+            ContentDocumentId = conDocId,
+            ShareType = 'V'
+        );
+        insert cdl;
+
+        DocGenFlowAction.Request req = new DocGenFlowAction.Request();
+        req.templateId = tpl.Id;
+        req.recordId = acc.Id;
+        req.sendForSignature = true;
+        req.recipientContactId = con.Id;
+        req.emailSubject = 'Please sign this';
+
+        Test.startTest();
+        List<DocGenFlowAction.Response> responses = DocGenFlowAction.generateDocument(new List<DocGenFlowAction.Request>{req});
+        Test.stopTest();
+
+        System.assertEquals(1, responses.size(), 'Should return 1 response');
+        System.assertNotEquals(null, responses[0].contentDocumentId, 'Should return contentDocumentId');
+        System.assertNotEquals(null, responses[0].envelopeId, 'Should return envelopeId');
+        System.assertEquals(null, responses[0].errorMessage, 'Should have no error');
+    }
+
+    @isTest
+    static void testFlowActionSendForSignatureError() {
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+        Account acc = [SELECT Id FROM Account LIMIT 1];
+
+        Blob docxBlob = createTestDocx('<w:document><w:body><w:p><w:r><w:t>{Name}</w:t></w:r></w:p></w:body></w:document>');
+        ContentVersion cv = new ContentVersion(
+            Title = 'FlowErrTemplate',
+            PathOnClient = 'FlowErrTemplate.docx',
+            VersionData = docxBlob,
+            IsMajorVersion = true
+        );
+        insert cv;
+        Id conDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id].ContentDocumentId;
+        ContentDocumentLink cdl = new ContentDocumentLink(
+            LinkedEntityId = tpl.Id,
+            ContentDocumentId = conDocId,
+            ShareType = 'V'
+        );
+        insert cdl;
+
+        DocGenFlowAction.Request req = new DocGenFlowAction.Request();
+        req.templateId = tpl.Id;
+        req.recordId = acc.Id;
+        req.sendForSignature = true;
+
+        Test.startTest();
+        List<DocGenFlowAction.Response> responses = DocGenFlowAction.generateDocument(new List<DocGenFlowAction.Request>{req});
+        Test.stopTest();
+
+        System.assertEquals(1, responses.size(), 'Should return 1 response');
+        System.assertNotEquals(null, responses[0].errorMessage, 'Should contain error message');
+        System.assertEquals(null, responses[0].envelopeId, 'Should not return envelopeId');
+    }
+
+    @isTest
     static void testGetOrgUrl() {
         Test.startTest();
         String url = DocGenSetupController.getOrgUrl();

@@ -20,12 +20,28 @@ public with sharing class DocGenDocuSignController {
                 contactIds.add(ocr.ContactId);
             }
         } else if (objectApiName == 'Account') {
-            List<Account> accounts = [
-                SELECT PersonContactId, IsPersonAccount FROM Account WHERE Id = :recordId WITH USER_MODE LIMIT 1
-            ];
+            String accountQuery = 'SELECT Id';
+            Map<String, Schema.SObjectField> accountFields = Schema.SObjectType.Account.fields.getMap();
+            if (accountFields.containsKey('ispersonaccount')) {
+                accountQuery += ', IsPersonAccount';
+            }
+            if (accountFields.containsKey('personcontactid')) {
+                accountQuery += ', PersonContactId';
+            }
+            accountQuery += ' FROM Account WHERE Id = :recordId WITH USER_MODE LIMIT 1';
+            List<Account> accounts = Database.query(accountQuery, AccessLevel.USER_MODE);
             if (!accounts.isEmpty()) {
-                if (accounts[0].IsPersonAccount == true && accounts[0].PersonContactId != null) {
-                    contactIds.add(accounts[0].PersonContactId);
+                Account acc = accounts[0];
+                Boolean isPersonAccount = false;
+                Id personContactId = null;
+                if (accountFields.containsKey('ispersonaccount')) {
+                    isPersonAccount = (Boolean) acc.get('IsPersonAccount');
+                }
+                if (accountFields.containsKey('personcontactid')) {
+                    personContactId = (Id) acc.get('PersonContactId');
+                }
+                if (isPersonAccount == true && personContactId != null) {
+                    contactIds.add(personContactId);
                 }
                 for (AccountContactRole acr : [
                     SELECT ContactId FROM AccountContactRole WHERE AccountId = :recordId WITH USER_MODE LIMIT 100

@@ -62,7 +62,7 @@ public with sharing class DocGenService {
         String docTitle = generateDocTitle(titleFormat, recordDataMap);
         if (docTitle == null) docTitle = recordName;
         
-        return saveFile(resultBlob, docTitle, recordId, outputFormat, templateType);
+        return saveFile(resultBlob, docTitle, recordId, templateType);
     }
 
     // ... (processXml etc omitted, assuming unchanged relative position) ...
@@ -275,7 +275,7 @@ public with sharing class DocGenService {
         return current;
     }
     
-    private static Id saveFile(Blob fileBlob, String title, Id recordId, String format, String type) {
+    private static Id saveFile(Blob fileBlob, String title, Id recordId, String type) {
         ContentVersion cv = new ContentVersion();
         String baseName = (title != null ? title : 'Generated_Document');
         if (!baseName.startsWith('Generated_') && title == null) baseName = 'Generated_' + baseName; 
@@ -295,12 +295,6 @@ public with sharing class DocGenService {
         cv.FirstPublishLocationId = recordId; 
         insert cv;
 
-        // EXPERIMENT: Background PDF Rendition Hack
-        // If the requested format is PDF, add to the collector for delayed background capture
-        if (format == 'PDF') {
-            System.debug('DocGen: Collecting Rendition Capture for ' + cv.Id);
-            DocGenRenditionService.addPendingRendition(cv.Id, recordId);
-        }
         return [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id WITH USER_MODE].ContentDocumentId;
     }
     private static String generateDocTitle(String format, Map<String, Object> data) {

@@ -497,6 +497,196 @@ private class DocGenTests {
     }
 
     @isTest
+    static void testGenerateDocumentWithAnchors() {
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+        Account acc = [SELECT Id, Name FROM Account LIMIT 1];
+
+        DocGen_DocuSign_Mapping__mdt mapping = new DocGen_DocuSign_Mapping__mdt(
+            DeveloperName = 'Test_Anchor_' + System.currentTimeMillis(),
+            MasterLabel = 'Test Anchor',
+            Merge_Field__c = 'Name',
+            Anchor_Tag__c = '[[SIGN_HERE]]',
+            Anchor_Type__c = 'SignHere',
+            Template_Id__c = tpl.Id,
+            Active__c = true
+        );
+        insert mapping;
+
+        Blob docxBlob = createTestDocx('<w:document><w:body><w:p><w:r><w:t>{Name}</w:t></w:r></w:p></w:body></w:document>');
+        ContentVersion cv = new ContentVersion(
+            Title = 'AnchorTemplate',
+            PathOnClient = 'AnchorTemplate.docx',
+            VersionData = docxBlob,
+            IsMajorVersion = true
+        );
+        insert cv;
+        Id conDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id].ContentDocumentId;
+        ContentDocumentLink cdl = new ContentDocumentLink(
+            LinkedEntityId = tpl.Id,
+            ContentDocumentId = conDocId,
+            ShareType = 'V'
+        );
+        insert cdl;
+
+        Test.startTest();
+        Id resultDocId = DocGenService.generateDocument(tpl.Id, acc.Id, true);
+        Test.stopTest();
+
+        System.assertNotEquals(null, resultDocId, 'Should return a ContentDocumentId');
+
+        ContentVersion resultCv = [
+            SELECT Id, VersionData
+            FROM ContentVersion
+            WHERE ContentDocumentId = :resultDocId AND IsLatest = true
+            LIMIT 1
+        ];
+
+        Compression.ZipReader reader = new Compression.ZipReader(resultCv.VersionData);
+        String documentXml = reader.extract('word/document.xml').toString();
+        System.assert(documentXml.contains('[[SIGN_HERE]]'), 'Anchor tag should appear in generated XML: ' + documentXml);
+    }
+
+    @isTest
+    static void testGenerateDocumentWithAnchorSuffixInLoop() {
+        Account acc = new Account(Name = 'Loop Account');
+        insert acc;
+
+        Contact con1 = new Contact(FirstName = 'Alice', LastName = 'Smith', AccountId = acc.Id);
+        Contact con2 = new Contact(FirstName = 'Bob', LastName = 'Jones', AccountId = acc.Id);
+        insert new List<Contact>{ con1, con2 };
+
+        DocGen_Template__c tpl = new DocGen_Template__c(
+            Name = 'Loop Template',
+            Base_Object_API__c = 'Account',
+            Query_Config__c = 'Name, (SELECT FirstName, LastName FROM Contacts)',
+            Type__c = 'Word'
+        );
+        insert tpl;
+
+        DocGen_DocuSign_Mapping__mdt mapping = new DocGen_DocuSign_Mapping__mdt(
+            DeveloperName = 'Test_Loop_Anchor_' + System.currentTimeMillis(),
+            MasterLabel = 'Test Loop Anchor',
+            Merge_Field__c = 'FirstName',
+            Anchor_Tag__c = '[[SIGN]]',
+            Anchor_Type__c = 'SignHere',
+            Unique_Suffix_Field__c = 'LastName',
+            Template_Id__c = tpl.Id,
+            Active__c = true
+        );
+        insert mapping;
+
+        Blob docxBlob = createTestDocx('<w:document><w:body><w:p><w:r><w:t>{#Contacts}{FirstName}{/Contacts}</w:t></w:r></w:p></w:body></w:document>');
+        ContentVersion cv = new ContentVersion(
+            Title = 'LoopTemplate',
+            PathOnClient = 'LoopTemplate.docx',
+            VersionData = docxBlob,
+            IsMajorVersion = true
+        );
+        insert cv;
+        Id conDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id].ContentDocumentId;
+        ContentDocumentLink cdl = new ContentDocumentLink(
+            LinkedEntityId = tpl.Id,
+            ContentDocumentId = conDocId,
+            ShareType = 'V'
+        );
+        insert cdl;
+
+        Test.startTest();
+        Id resultDocId = DocGenService.generateDocument(tpl.Id, acc.Id, true);
+        Test.stopTest();
+
+        System.assertNotEquals(null, resultDocId, 'Should return a ContentDocumentId');
+
+        ContentVersion resultCv = [
+            SELECT Id, VersionData
+            FROM ContentVersion
+            WHERE ContentDocumentId = :resultDocId AND IsLatest = true
+            LIMIT 1
+        ];
+
+        Compression.ZipReader reader = new Compression.ZipReader(resultCv.VersionData);
+        String documentXml = reader.extract('word/document.xml').toString();
+        System.assert(documentXml.contains('[[SIGN]]-Smith'), 'First unique anchor should appear: ' + documentXml);
+        System.assert(documentXml.contains('[[SIGN]]-Jones'), 'Second unique anchor should appear: ' + documentXml);
+    }
+
+    @isTest
+    static void testFlowActionSendForSignature() {
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+        Account acc = [SELECT Id FROM Account LIMIT 1];
+
+        Contact con = new Contact(FirstName = 'Test', LastName = 'Signer', Email = 'signer@example.com', AccountId = acc.Id);
+        insert con;
+
+        Blob docxBlob = createTestDocx('<w:document><w:body><w:p><w:r><w:t>{Name}</w:t></w:r></w:p></w:body></w:document>');
+        ContentVersion cv = new ContentVersion(
+            Title = 'FlowSigTemplate',
+            PathOnClient = 'FlowSigTemplate.docx',
+            VersionData = docxBlob,
+            IsMajorVersion = true
+        );
+        insert cv;
+        Id conDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id].ContentDocumentId;
+        ContentDocumentLink cdl = new ContentDocumentLink(
+            LinkedEntityId = tpl.Id,
+            ContentDocumentId = conDocId,
+            ShareType = 'V'
+        );
+        insert cdl;
+
+        DocGenFlowAction.Request req = new DocGenFlowAction.Request();
+        req.templateId = tpl.Id;
+        req.recordId = acc.Id;
+        req.sendForSignature = true;
+        req.recipientContactId = con.Id;
+        req.emailSubject = 'Please sign this';
+
+        Test.startTest();
+        List<DocGenFlowAction.Response> responses = DocGenFlowAction.generateDocument(new List<DocGenFlowAction.Request>{req});
+        Test.stopTest();
+
+        System.assertEquals(1, responses.size(), 'Should return 1 response');
+        System.assertNotEquals(null, responses[0].contentDocumentId, 'Should return contentDocumentId');
+        System.assertNotEquals(null, responses[0].envelopeId, 'Should return envelopeId');
+        System.assertEquals(null, responses[0].errorMessage, 'Should have no error');
+    }
+
+    @isTest
+    static void testFlowActionSendForSignatureError() {
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+        Account acc = [SELECT Id FROM Account LIMIT 1];
+
+        Blob docxBlob = createTestDocx('<w:document><w:body><w:p><w:r><w:t>{Name}</w:t></w:r></w:p></w:body></w:document>');
+        ContentVersion cv = new ContentVersion(
+            Title = 'FlowErrTemplate',
+            PathOnClient = 'FlowErrTemplate.docx',
+            VersionData = docxBlob,
+            IsMajorVersion = true
+        );
+        insert cv;
+        Id conDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id].ContentDocumentId;
+        ContentDocumentLink cdl = new ContentDocumentLink(
+            LinkedEntityId = tpl.Id,
+            ContentDocumentId = conDocId,
+            ShareType = 'V'
+        );
+        insert cdl;
+
+        DocGenFlowAction.Request req = new DocGenFlowAction.Request();
+        req.templateId = tpl.Id;
+        req.recordId = acc.Id;
+        req.sendForSignature = true;
+
+        Test.startTest();
+        List<DocGenFlowAction.Response> responses = DocGenFlowAction.generateDocument(new List<DocGenFlowAction.Request>{req});
+        Test.stopTest();
+
+        System.assertEquals(1, responses.size(), 'Should return 1 response');
+        System.assertNotEquals(null, responses[0].errorMessage, 'Should contain error message');
+        System.assertEquals(null, responses[0].envelopeId, 'Should not return envelopeId');
+    }
+
+    @isTest
     static void testGetOrgUrl() {
         Test.startTest();
         String url = DocGenSetupController.getOrgUrl();

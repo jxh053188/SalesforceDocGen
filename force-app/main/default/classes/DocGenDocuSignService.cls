@@ -50,26 +50,22 @@ public with sharing class DocGenDocuSignService {
         }
         ContentVersion cv = cvs[0];
 
-        dfsle.Document doc = new dfsle.Document(
-            Id = cv.Id,
-            Name = cv.Title
-        );
+        dfsle.Document doc = dfsle.Document.fromFile(cv);
 
-        dfsle.Recipient recipient = new dfsle.Recipient(
-            Email = recipientContact.Email,
-            Name = recipientContact.Name,
-            RoutingOrder = 1,
-            RoleName = 'Signer 1'
-        );
+        dfsle.Recipient recipient = dfsle.Recipient.newBulkRecipient(
+            recipientContact.Name,
+            recipientContact.Email,
+            new dfsle.Entity(recipientContact.Id)
+        ).withRoutingOrder(1).withRole('Signer 1');
 
-        dfsle.Envelope envelope = new dfsle.Envelope(
-            EmailSubject = String.isNotBlank(emailSubject)
-                ? emailSubject
-                : 'Please review and sign: ' + cv.Title,
-            SourceId = sourceRecordId,
-            Documents = new List<dfsle.Document>{ doc },
-            Recipients = new List<dfsle.Recipient>{ recipient }
-        );
+        String subject = String.isNotBlank(emailSubject)
+            ? emailSubject
+            : 'Please review and sign: ' + cv.Title;
+
+        dfsle.Envelope envelope = dfsle.EnvelopeService.getEmptyEnvelope(new dfsle.Entity(sourceRecordId))
+            .withDocuments(new List<dfsle.Document>{ doc })
+            .withRecipients(new List<dfsle.Recipient>{ recipient })
+            .withEmail(subject, null);
 
         if (String.isNotBlank(overrideDocuSignTemplateId)) {
             System.debug(LoggingLevel.INFO,
@@ -84,7 +80,7 @@ public with sharing class DocGenDocuSignService {
         }
 
         try {
-            dfsle.Envelope sentEnvelope = dfsle.EnvelopeService.sendEnvelope(envelope);
+            dfsle.Envelope sentEnvelope = dfsle.EnvelopeService.sendEnvelope(envelope, true);
             return sentEnvelope.id;
         } catch (Exception e) {
             throw new DocGenException('DocuSign send failed: ' + e.getMessage());

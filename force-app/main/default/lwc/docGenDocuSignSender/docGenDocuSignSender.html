@@ -1,0 +1,55 @@
+<template>
+    <div class="slds-p-around_medium">
+        <template if:true={isLoading}>
+            <lightning-spinner alternative-text="Loading" size="medium"></lightning-spinner>
+        </template>
+
+        <div class="slds-m-bottom_medium">
+            <lightning-combobox
+                name="template"
+                label="Select Template"
+                value={selectedTemplateId}
+                placeholder="Choose a document template"
+                options={templateOptions}
+                onchange={handleTemplateChange}
+                required>
+            </lightning-combobox>
+        </div>
+
+        <div class="slds-m-bottom_medium">
+            <lightning-combobox
+                name="recipient"
+                label="Recipient Contact"
+                value={selectedContactId}
+                placeholder="-- Use Record Default --"
+                options={contactOptions}
+                onchange={handleContactChange}>
+            </lightning-combobox>
+        </div>
+
+        <div class="slds-m-bottom_medium">
+            <lightning-input
+                type="text"
+                label="Email Subject"
+                value={emailSubject}
+                onchange={handleEmailSubjectChange}
+                placeholder="Optional custom subject">
+            </lightning-input>
+        </div>
+
+        <div class="slds-m-top_large">
+            <lightning-button
+                variant="brand"
+                label="Generate & Send via DocuSign"
+                title="Generate & Send via DocuSign"
+                onclick={handleGenerateAndSend}
+                disabled={isGenerateDisabled}
+                class="slds-m-left_x-small">
+            </lightning-button>
+        </div>
+
+        <template if:true={error}>
+            <div class="slds-text-color_error slds-m-top_medium">{error}</div>
+        </template>
+    </div>
+</template>

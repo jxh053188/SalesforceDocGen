@@ -93,7 +93,7 @@ public without sharing class DocGenSignatureService {
         newCv.IsMajorVersion = true;
         insert newCv;
         
-        Id newDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :newCv.Id].ContentDocumentId;
+        Id newDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :newCv.Id WITH SYSTEM_MODE LIMIT 1].ContentDocumentId;
         
         if (String.isNotBlank(relatedRecordId)) {
             ContentDocumentLink cdl = new ContentDocumentLink();
@@ -130,21 +130,18 @@ public without sharing class DocGenSignatureService {
             Id signedCvId = stampSignature(req.Source_Document_Id__c, base64Image, req.Id, req.Related_Record_Id__c);
 
             // 2. Mark audit trail
+            Id signedDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :signedCvId WITH SYSTEM_MODE LIMIT 1].ContentDocumentId;
             DocGen_Signature_Audit__c audit = new DocGen_Signature_Audit__c();
             audit.Signature_Request__c = req.Id;
             audit.Signed_Date__c = System.now();
-            audit.Document_Hash_SHA256__c = 'PENDING_RENDITION:' + signedCvId;
-            audit.IP_Address__c = 'Captured via Async Path'; 
+            audit.Document_Hash_SHA256__c = String.valueOf(signedDocId);
+            audit.IP_Address__c = 'Captured via Async Path';
             audit.User_Agent__c = 'System Handler';
             insert audit;
 
             // 3. Mark Request as Signed
             req.Status__c = 'Signed';
             update req;
-
-            // 4. Trigger PDF Rendition (requires external credential access)
-            DocGenRenditionService.addPendingRendition(signedCvId, req.Related_Record_Id__c);
-            DocGenRenditionService.enqueueRenditions();
 
         } catch (Exception e) {
             System.debug('DocGen: Error in signature handling: ' + e.getMessage());

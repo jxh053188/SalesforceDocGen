@@ -8,13 +8,18 @@ private class DocGenSharingTests {
             Base_Object_API__c = 'Account'
         );
         insert t;
-        
-        Profile p = [SELECT Id FROM Profile WHERE Name='Standard User' LIMIT 1];
-        User u = new User(Alias = 'standt', Email='standarduser@testorg.com', 
-            EmailEncodingKey='UTF-8', LastName='Testing', LanguageLocaleKey='en_US', 
-            LocaleSidKey='en_US', ProfileId = p.Id, 
-            TimeZoneSidKey='America/Los_Angeles', UserName='standarduser' + DateTime.now().getTime() + '@testorg.com');
-        insert u;
+
+        System.runAs(new User(Id = UserInfo.getUserId())) {
+            UserRole r = new UserRole(Name = 'DocGenTestRole', DeveloperName = 'DocGenTestRole_' + DateTime.now().getTime());
+            insert r;
+
+            Profile p = [SELECT Id FROM Profile WHERE Name='Standard User' LIMIT 1];
+            User u = new User(Alias = 'standt', Email='standarduser@testorg.com',
+                EmailEncodingKey='UTF-8', LastName='Testing', LanguageLocaleKey='en_US',
+                LocaleSidKey='en_US', ProfileId = p.Id, UserRoleId = r.Id,
+                TimeZoneSidKey='America/Los_Angeles', UserName='standarduser' + DateTime.now().getTime() + '@testorg.com');
+            insert u;
+        }
     }
 
     @IsTest

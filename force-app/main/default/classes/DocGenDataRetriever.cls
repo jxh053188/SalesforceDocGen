@@ -13,7 +13,11 @@ public with sharing class DocGenDataRetriever {
         }
 
         // The query string is constructed safely by the builder, but we still ensure the base string is valid
-        String query = fieldsConfig + ' WHERE Id = :recordId LIMIT 1';
+        String fieldsPart = fieldsConfig.trim();
+        if (fieldsPart.toLowerCase().startsWith('select ')) {
+            fieldsPart = fieldsPart.substring(7).trim();
+        }
+        String query = 'SELECT ' + fieldsPart + ' FROM ' + baseObject + ' WHERE Id = :recordId LIMIT 1';
         
         System.debug(LoggingLevel.INFO, 'DocGen Query: ' + query);
 

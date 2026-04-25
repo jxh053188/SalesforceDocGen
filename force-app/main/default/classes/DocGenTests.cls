@@ -785,7 +785,7 @@ private class DocGenTests {
         Test.startTest();
         try {
             DocGenDataRetriever.getRecordData(acc.Id, 'Account', 'Id, InvalidField__c');
-        } catch (AuraHandledException e) {
+        } catch (DocGenException e) {
             threw = true;
             System.assert(e.getMessage().contains('Invalid field'), 'Exception should mention invalid field: ' + e.getMessage());
         }
@@ -800,7 +800,7 @@ private class DocGenTests {
         Test.startTest();
         try {
             DocGenDataRetriever.getRecordData(acc.Id, 'Account', 'Id /* unclosed comment');
-        } catch (AuraHandledException e) {
+        } catch (DocGenException e) {
             threw = true;
             System.assert(e.getMessage().contains('Unclosed block comment'), 'Exception should mention unclosed comment: ' + e.getMessage());
         }
@@ -815,7 +815,7 @@ private class DocGenTests {
         Test.startTest();
         try {
             DocGenDataRetriever.getRecordData(acc.Id, 'Account', 'Id, Name FROM Account');
-        } catch (AuraHandledException e) {
+        } catch (DocGenException e) {
             threw = true;
             System.assert(e.getMessage().contains('FROM keyword'), 'Exception should mention FROM keyword: ' + e.getMessage());
         }
@@ -830,7 +830,7 @@ private class DocGenTests {
         Test.startTest();
         try {
             DocGenDataRetriever.getRecordData(acc.Id, 'Account', 'Id, Name WHERE Name = \'x\'');
-        } catch (AuraHandledException e) {
+        } catch (DocGenException e) {
             threw = true;
             System.assert(e.getMessage().contains('WHERE keyword'), 'Exception should mention WHERE keyword: ' + e.getMessage());
         }

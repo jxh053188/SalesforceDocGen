@@ -9,7 +9,7 @@ public with sharing class DocGenDataRetriever {
      */
     public static Map<String, Object> getRecordData(Id recordId, String baseObject, String fieldsConfig) {
         if (String.isBlank(baseObject) || String.isBlank(fieldsConfig) || recordId == null) {
-            throw new AuraHandledException('Invalid parameters for data retrieval.');
+            throw new DocGenException('Invalid parameters for data retrieval.');
         }
 
         // The query string is constructed safely by the builder, but we still ensure the base string is valid
@@ -30,6 +30,9 @@ public with sharing class DocGenDataRetriever {
             }
             // Optimization: Use manual mapping to avoid JSON.serialize Heap Spike
             return mapSObject(results[0]);
+        } catch (DocGenException e) {
+            // Re-wrap validation errors so Lightning components receive the message
+            throw new AuraHandledException(e.getMessage());
         } catch (Exception e) {
              // Fallback: If stripping failed (e.g. subquery error), return clear error
             System.debug(LoggingLevel.ERROR, 'DocGen: Query Execution Error: ' + e.getMessage() + '\nStack: ' + e.getStackTraceString());
@@ -49,10 +52,10 @@ public with sharing class DocGenDataRetriever {
 
             String lower = trimmed.toLowerCase();
             if ((lower.contains(' from ') || lower.startsWith('from ')) && !(trimmed.startsWith('(') && trimmed.endsWith(')'))) {
-                throw new AuraHandledException('Invalid token: FROM keyword detected in fields configuration.');
+                throw new DocGenException('Invalid token: FROM keyword detected in fields configuration.');
             }
             if ((lower.contains(' where ') || lower.startsWith('where ')) && !(trimmed.startsWith('(') && trimmed.endsWith(')'))) {
-                throw new AuraHandledException('Invalid token: WHERE keyword detected in fields configuration.');
+                throw new DocGenException('Invalid token: WHERE keyword detected in fields configuration.');
             }
 
             if (trimmed.startsWith('(') && trimmed.endsWith(')')) {
@@ -67,7 +70,7 @@ public with sharing class DocGenDataRetriever {
         }
 
         if (validatedFields.isEmpty()) {
-            throw new AuraHandledException('No valid fields found in configuration.');
+            throw new DocGenException('No valid fields found in configuration.');
         }
 
         return String.join(validatedFields, ', ');
@@ -78,7 +81,7 @@ public with sharing class DocGenDataRetriever {
         while (startIdx >= 0) {
             Integer endIdx = input.indexOf('*/', startIdx + 2);
             if (endIdx == -1) {
-                throw new AuraHandledException('Unclosed block comment in fields configuration.');
+                throw new DocGenException('Unclosed block comment in fields configuration.');
             }
             input = input.substring(0, startIdx) + ' ' + input.substring(endIdx + 2);
             startIdx = input.indexOf('/*');
@@ -125,7 +128,7 @@ public with sharing class DocGenDataRetriever {
     private static Schema.DescribeSObjectResult getDescribeResult(String objectName, Map<String, Schema.SObjectType> globalDescribe) {
         Schema.SObjectType sot = globalDescribe.get(objectName);
         if (sot == null) {
-            throw new AuraHandledException('Invalid object: ' + objectName);
+            throw new DocGenException('Invalid object: ' + objectName);
         }
         return sot.getDescribe();
     }
@@ -134,7 +137,7 @@ public with sharing class DocGenDataRetriever {
         Schema.DescribeSObjectResult describeResult = getDescribeResult(objectName, gd);
         Map<String, Schema.SObjectField> fieldMap = describeResult.fields.getMap();
         if (!fieldMap.containsKey(fieldName.toLowerCase())) {
-            throw new AuraHandledException('Invalid field: ' + fieldName + ' on object ' + objectName);
+            throw new DocGenException('Invalid field: ' + fieldName + ' on object ' + objectName);
         }
     }
 
@@ -144,19 +147,19 @@ public with sharing class DocGenDataRetriever {
         for (Integer i = 0; i < parts.size(); i++) {
             String part = parts[i].trim();
             if (String.isBlank(part)) {
-                throw new AuraHandledException('Invalid empty segment in field path: ' + path);
+                throw new DocGenException('Invalid empty segment in field path: ' + path);
             }
             Schema.DescribeSObjectResult describeResult = getDescribeResult(currentObject, gd);
             Map<String, Schema.SObjectField> fieldMap = describeResult.fields.getMap();
             Schema.SObjectField field = fieldMap.get(part.toLowerCase());
             if (field == null) {
-                throw new AuraHandledException('Invalid field or relationship: ' + part + ' on ' + currentObject);
+                throw new DocGenException('Invalid field or relationship: ' + part + ' on ' + currentObject);
             }
             if (i < parts.size() - 1) {
                 Schema.DescribeFieldResult fieldDesc = field.getDescribe();
                 List<Schema.sObjectType> refs = fieldDesc.getReferenceTo();
                 if (refs == null || refs.isEmpty()) {
-                    throw new AuraHandledException('Field is not a relationship: ' + part);
+                    throw new DocGenException('Field is not a relationship: ' + part);
                 }
                 currentObject = refs[0].getDescribe().getName();
             }
@@ -166,17 +169,17 @@ public with sharing class DocGenDataRetriever {
     private static String validateSubquery(String subquery, String objectName, Map<String, Schema.SObjectType> gd) {
         String innerQuery = subquery.substring(1, subquery.length() - 1).trim();
         if (!innerQuery.toLowerCase().startsWith('select ')) {
-            throw new AuraHandledException('Invalid subquery: missing SELECT.');
+            throw new DocGenException('Invalid subquery: missing SELECT.');
         }
 
         Pattern fromPattern = Pattern.compile('(?i)\\bFROM\\s+([a-zA-Z_]\\w*)');
         Matcher fromMatcher = fromPattern.matcher(innerQuery);
         if (!fromMatcher.find()) {
-            throw new AuraHandledException('Invalid subquery: missing FROM clause.');
+            throw new DocGenException('Invalid subquery: missing FROM clause.');
         }
 
         if (String.isNotBlank(innerQuery.substring(fromMatcher.end()).trim())) {
-            throw new AuraHandledException('Invalid subquery: extra clauses detected.');
+            throw new DocGenException('Invalid subquery: extra clauses detected.');
         }
 
         String childRelName = fromMatcher.group(1);
@@ -194,7 +197,7 @@ public with sharing class DocGenDataRetriever {
             }
         }
         if (!found) {
-            throw new AuraHandledException('Invalid child relationship: ' + childRelName);
+            throw new DocGenException('Invalid child relationship: ' + childRelName);
         }
 
         String fieldsPart = innerQuery.substring(7, fromMatcher.start()).trim();
@@ -212,7 +215,7 @@ public with sharing class DocGenDataRetriever {
         }
 
         if (validatedSubFields.isEmpty()) {
-            throw new AuraHandledException('No valid fields found in subquery.');
+            throw new DocGenException('No valid fields found in subquery.');
         }
 
         return '(SELECT ' + String.join(validatedSubFields, ', ') + ' FROM ' + childRelName + ')';

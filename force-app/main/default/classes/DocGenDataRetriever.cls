@@ -153,6 +153,16 @@ public with sharing class DocGenDataRetriever {
             Map<String, Schema.SObjectField> fieldMap = describeResult.fields.getMap();
             Schema.SObjectField field = fieldMap.get(part.toLowerCase());
             if (field == null) {
+                // Relationship names (e.g. "Owner" for "OwnerId") are not in the field map keys
+                for (Schema.SObjectField f : fieldMap.values()) {
+                    Schema.DescribeFieldResult fd = f.getDescribe();
+                    if (fd.getRelationshipName() != null && fd.getRelationshipName().equalsIgnoreCase(part)) {
+                        field = f;
+                        break;
+                    }
+                }
+            }
+            if (field == null) {
                 throw new DocGenException('Invalid field or relationship: ' + part + ' on ' + currentObject);
             }
             if (i < parts.size() - 1) {

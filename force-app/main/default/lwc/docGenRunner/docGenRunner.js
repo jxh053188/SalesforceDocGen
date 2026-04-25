@@ -431,6 +431,7 @@ export default class DocGenRunner extends LightningElement {
 
     handleMessage = async (event) => {
         if (event.origin !== window.location.origin) return;
+        if (!event.data) return;
         if (event.data.type === 'docgen_success') {
             console.log('DocGen: PDF Engine success received.');
             if (this.outputMode === 'save' && event.data.blob) {

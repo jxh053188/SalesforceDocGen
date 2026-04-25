@@ -5,18 +5,11 @@
         <name>CustomApplication</name>
     </types>
     <types>
-        <members>DocGenBatch</members>
-        <members>DocGenBulkController</members>
-        <members>DocGenBulkFlowAction</members>
-        <members>DocGenBulkFlowActionTest</members>
-        <members>DocGenBulkTests</members>
         <members>DocGenController</members>
         <members>DocGenDataRetriever</members>
         <members>DocGenException</members>
         <members>DocGenFlowAction</members>
         <members>DocGenService</members>
-        <members>DocGenRenditionQueueable</members>
-        <members>DocGenRenditionService</members>
         <members>DocGenSharingTests</members>
         <members>DocGenTemplateManager</members>
         <members>DocGenTests</members>
@@ -28,20 +21,7 @@
         <members>DocGenSignatureSubmitter</members>
         <members>DocGenSignatureValidator</members>
         <members>DocGenAuthenticatorController</members>
-        <members>LoopbackTestQueueable</members>
         <name>ApexClass</name>
-    </types>
-    <types>
-        <members>DocGen_Auth_Provider</members>
-        <name>AuthProvider</name>
-    </types>
-    <types>
-        <members>DocGen_Loopback_Auth</members>
-        <name>ExternalCredential</name>
-    </types>
-    <types>
-        <members>DocGenRenditionTrigger</members>
-        <name>ApexTrigger</name>
     </types>
     <types>
         <members>DocGenPDFEngine</members>
@@ -50,19 +30,15 @@
         <name>ApexPage</name>
     </types>
     <types>
-        <members>DocGen_Job__c</members>
         <members>DocGen_Saved_Query__c</members>
         <members>DocGen_Template_Version__c</members>
         <members>DocGen_Template__c</members>
         <members>DocGen_Signature_Request__c</members>
         <members>DocGen_Signature_Audit__c</members>
         <members>DocGen_Settings__c</members>
-        <members>DocGen_Rendition_Event__e</members>
         <name>CustomObject</name>
     </types>
     <types>
-        <members>DocGen_Bulk_Gen</members>
-        <members>DocGen_Job__c</members>
         <members>DocGen_Template_Manager</members>
         <members>DocGen_Template_Version__c</members>
         <members>DocGen_Template__c</members>
@@ -105,10 +81,6 @@
         <members>mammoth</members>
         <members>pizzip</members>
         <name>StaticResource</name>
-    </types>
-    <types>
-        <members>DocGen_Loopback</members>
-        <name>NamedCredential</name>
     </types>
     <types>
         <members>DocGen_Signature_Submission</members>

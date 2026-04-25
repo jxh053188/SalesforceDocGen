@@ -131,8 +131,8 @@ public with sharing class DocGenDataRetriever {
     }
 
     private static void validateSimpleField(String fieldName, String objectName, Map<String, Schema.SObjectType> gd) {
-        Schema.DescribeSObjectResult desc = getDescribeResult(objectName, gd);
-        Map<String, Schema.SObjectField> fieldMap = desc.fields.getMap();
+        Schema.DescribeSObjectResult describeResult = getDescribeResult(objectName, gd);
+        Map<String, Schema.SObjectField> fieldMap = describeResult.fields.getMap();
         if (!fieldMap.containsKey(fieldName.toLowerCase())) {
             throw new AuraHandledException('Invalid field: ' + fieldName + ' on object ' + objectName);
         }
@@ -146,8 +146,8 @@ public with sharing class DocGenDataRetriever {
             if (String.isBlank(part)) {
                 throw new AuraHandledException('Invalid empty segment in field path: ' + path);
             }
-            Schema.DescribeSObjectResult desc = getDescribeResult(currentObject, gd);
-            Map<String, Schema.SObjectField> fieldMap = desc.fields.getMap();
+            Schema.DescribeSObjectResult describeResult = getDescribeResult(currentObject, gd);
+            Map<String, Schema.SObjectField> fieldMap = describeResult.fields.getMap();
             Schema.SObjectField field = fieldMap.get(part.toLowerCase());
             if (field == null) {
                 throw new AuraHandledException('Invalid field or relationship: ' + part + ' on ' + currentObject);
@@ -164,25 +164,25 @@ public with sharing class DocGenDataRetriever {
     }
 
     private static String validateSubquery(String subquery, String objectName, Map<String, Schema.SObjectType> gd) {
-        String inner = subquery.substring(1, subquery.length() - 1).trim();
-        if (!inner.toLowerCase().startsWith('select ')) {
+        String innerQuery = subquery.substring(1, subquery.length() - 1).trim();
+        if (!innerQuery.toLowerCase().startsWith('select ')) {
             throw new AuraHandledException('Invalid subquery: missing SELECT.');
         }
 
         Pattern fromPattern = Pattern.compile('(?i)\\bFROM\\s+([a-zA-Z_]\\w*)');
-        Matcher fromMatcher = fromPattern.matcher(inner);
+        Matcher fromMatcher = fromPattern.matcher(innerQuery);
         if (!fromMatcher.find()) {
             throw new AuraHandledException('Invalid subquery: missing FROM clause.');
         }
 
-        if (String.isNotBlank(inner.substring(fromMatcher.end()).trim())) {
+        if (String.isNotBlank(innerQuery.substring(fromMatcher.end()).trim())) {
             throw new AuraHandledException('Invalid subquery: extra clauses detected.');
         }
 
         String childRelName = fromMatcher.group(1);
 
-        Schema.DescribeSObjectResult desc = getDescribeResult(objectName, gd);
-        List<Schema.ChildRelationship> childRels = desc.getChildRelationships();
+        Schema.DescribeSObjectResult describeResult = getDescribeResult(objectName, gd);
+        List<Schema.ChildRelationship> childRels = describeResult.getChildRelationships();
 
         String childObjectName = null;
         Boolean found = false;
@@ -197,7 +197,7 @@ public with sharing class DocGenDataRetriever {
             throw new AuraHandledException('Invalid child relationship: ' + childRelName);
         }
 
-        String fieldsPart = inner.substring(7, fromMatcher.start()).trim();
+        String fieldsPart = innerQuery.substring(7, fromMatcher.start()).trim();
         List<String> subFields = tokenizeByTopLevelCommas(fieldsPart);
         List<String> validatedSubFields = new List<String>();
         for (String sf : subFields) {

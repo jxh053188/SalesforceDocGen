@@ -747,4 +747,94 @@ private class DocGenTests {
         DocGen_Settings__c settings = DocGen_Settings__c.getOrgDefaults();
         System.assertEquals('https://test.example.com', settings.Experience_Site_Url__c, 'Settings should be saved');
     }
+
+    @isTest
+    static void testValidateFieldsConfigValidSimpleFields() {
+        Account acc = [SELECT Id FROM Account LIMIT 1];
+        Test.startTest();
+        Map<String, Object> data = DocGenDataRetriever.getRecordData(acc.Id, 'Account', 'Id, Name, AccountSource');
+        Test.stopTest();
+        System.assertNotEquals(null, data, 'Data should not be null');
+        System.assertEquals('Test Account', data.get('Name'), 'Name should match');
+    }
+
+    @isTest
+    static void testValidateFieldsConfigValidParentPath() {
+        Account acc = [SELECT Id FROM Account LIMIT 1];
+        Test.startTest();
+        Map<String, Object> data = DocGenDataRetriever.getRecordData(acc.Id, 'Account', 'Id, Name, Owner.Name');
+        Test.stopTest();
+        System.assertNotEquals(null, data, 'Data should not be null');
+        System.assertEquals('Test Account', data.get('Name'), 'Name should match');
+    }
+
+    @isTest
+    static void testValidateFieldsConfigValidSubquery() {
+        Account acc = [SELECT Id FROM Account LIMIT 1];
+        Test.startTest();
+        Map<String, Object> data = DocGenDataRetriever.getRecordData(acc.Id, 'Account', 'Id, Name, (SELECT Id FROM Contacts)');
+        Test.stopTest();
+        System.assertNotEquals(null, data, 'Data should not be null');
+        System.assertEquals('Test Account', data.get('Name'), 'Name should match');
+    }
+
+    @isTest
+    static void testValidateFieldsConfigInvalidFieldRejection() {
+        Account acc = [SELECT Id FROM Account LIMIT 1];
+        Boolean threw = false;
+        Test.startTest();
+        try {
+            DocGenDataRetriever.getRecordData(acc.Id, 'Account', 'Id, InvalidField__c');
+        } catch (AuraHandledException e) {
+            threw = true;
+            System.assert(e.getMessage().contains('Invalid field'), 'Exception should mention invalid field: ' + e.getMessage());
+        }
+        Test.stopTest();
+        System.assert(threw, 'Should throw for invalid field');
+    }
+
+    @isTest
+    static void testValidateFieldsConfigCommentInjectionRejection() {
+        Account acc = [SELECT Id FROM Account LIMIT 1];
+        Boolean threw = false;
+        Test.startTest();
+        try {
+            DocGenDataRetriever.getRecordData(acc.Id, 'Account', 'Id /* unclosed comment');
+        } catch (AuraHandledException e) {
+            threw = true;
+            System.assert(e.getMessage().contains('Unclosed block comment'), 'Exception should mention unclosed comment: ' + e.getMessage());
+        }
+        Test.stopTest();
+        System.assert(threw, 'Should throw for comment injection');
+    }
+
+    @isTest
+    static void testValidateFieldsConfigFromKeywordInjectionRejection() {
+        Account acc = [SELECT Id FROM Account LIMIT 1];
+        Boolean threw = false;
+        Test.startTest();
+        try {
+            DocGenDataRetriever.getRecordData(acc.Id, 'Account', 'Id, Name FROM Account');
+        } catch (AuraHandledException e) {
+            threw = true;
+            System.assert(e.getMessage().contains('FROM keyword'), 'Exception should mention FROM keyword: ' + e.getMessage());
+        }
+        Test.stopTest();
+        System.assert(threw, 'Should throw for FROM keyword injection');
+    }
+
+    @isTest
+    static void testValidateFieldsConfigWhereKeywordInjectionRejection() {
+        Account acc = [SELECT Id FROM Account LIMIT 1];
+        Boolean threw = false;
+        Test.startTest();
+        try {
+            DocGenDataRetriever.getRecordData(acc.Id, 'Account', 'Id, Name WHERE Name = \'x\'');
+        } catch (AuraHandledException e) {
+            threw = true;
+            System.assert(e.getMessage().contains('WHERE keyword'), 'Exception should mention WHERE keyword: ' + e.getMessage());
+        }
+        Test.stopTest();
+        System.assert(threw, 'Should throw for WHERE keyword injection');
+    }
 }

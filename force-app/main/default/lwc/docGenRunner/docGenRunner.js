@@ -249,8 +249,8 @@ export default class DocGenRunner extends LightningElement {
                 const htmlString = this.base64ToUtf8String(templateData);
                 const template = window.Handlebars.compile(htmlString);
                 const renderedHtml = template(recordData, {
-                    allowProtoPropertiesByDefault: true,
-                    allowProtoMethodsByDefault: true
+                    allowProtoPropertiesByDefault: false,
+                    allowProtoMethodsByDefault: false
                 });
                 if (this.templateOutputFormat === 'PDF') {
                     console.log('DocGen: PDF output requested. Sending HTML to PDF Engine...');
@@ -430,6 +430,7 @@ export default class DocGenRunner extends LightningElement {
     }
 
     handleMessage = async (event) => {
+        if (event.origin !== window.location.origin) return;
         if (event.data.type === 'docgen_success') {
             console.log('DocGen: PDF Engine success received.');
             if (this.outputMode === 'save' && event.data.blob) {

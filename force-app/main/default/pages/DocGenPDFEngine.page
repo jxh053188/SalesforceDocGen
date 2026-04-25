@@ -53,10 +53,12 @@
         <!-- DOCX Preview for High Fidelity Rendering -->
         <script src="{!URLFOR($Resource.DocGenEngine, 'jszip.min.js')}"></script>
         <script src="{!URLFOR($Resource.DocGenEngine, 'docx-preview.js')}"></script>
+        <script src="{!URLFOR($Resource.DocGenEngine, 'purify.min.js')}"></script>
         
         <script>
             // Listen for messages from LWC
             window.addEventListener('message', async function(event) {
+                if (event.origin !== window.location.origin) return;
                 const data = event.data;
                 if (data.type === 'generate') {
                     console.log('PDF Engine: Received generation request', data.fileName);
@@ -90,7 +92,7 @@
                         if (data.html !== undefined && data.html !== null) {
                             // HTML input: render directly into container then convert to PDF
                             console.log('PDF Engine: Rendering HTML...');
-                            container.innerHTML = data.html;
+                            container.innerHTML = DOMPurify.sanitize(data.html);
                             setTimeout(function() {
                                 console.log('PDF Engine: Converting HTML to PDF...');
                                 runHtml2Pdf();
@@ -117,15 +119,15 @@
             });
 
             function sendError(msg) {
-                window.parent.postMessage({ type: 'docgen_error', message: msg }, '*');
+                window.parent.postMessage({ type: 'docgen_error', message: msg }, window.location.origin);
             }
 
             function sendSuccess(blob, fileName) {
-                window.parent.postMessage({ 
-                    type: 'docgen_success', 
+                window.parent.postMessage({
+                    type: 'docgen_success',
                     blob: blob,
                     fileName: fileName
-                }, '*');
+                }, window.location.origin);
             }
         </script>
     </body>

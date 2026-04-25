@@ -17,7 +17,8 @@ public with sharing class DocGenDataRetriever {
         if (fieldsPart.toLowerCase().startsWith('select ')) {
             fieldsPart = fieldsPart.substring(7).trim();
         }
-        String query = 'SELECT ' + fieldsPart + ' FROM ' + baseObject + ' WHERE Id = :recordId LIMIT 1';
+        String validatedFields = validateFieldsConfig(fieldsPart, baseObject);
+        String query = 'SELECT ' + validatedFields + ' FROM ' + baseObject + ' WHERE Id = :recordId LIMIT 1';
         
         System.debug(LoggingLevel.INFO, 'DocGen Query: ' + query);
 
@@ -33,6 +34,182 @@ public with sharing class DocGenDataRetriever {
              // Fallback: If stripping failed (e.g. subquery error), return clear error
             System.debug(LoggingLevel.ERROR, 'DocGen: Query Execution Error: ' + e.getMessage() + '\nStack: ' + e.getStackTraceString());
             throw new AuraHandledException('Error executing query. Details: ' + e.getMessage());
+        }
+    }
+
+    private static String validateFieldsConfig(String fieldsConfig, String baseObject) {
+        String cleaned = stripComments(fieldsConfig);
+        List<String> tokens = tokenizeByTopLevelCommas(cleaned);
+        List<String> validatedFields = new List<String>();
+
+        for (String token : tokens) {
+            String trimmed = token.trim();
+            if (String.isBlank(trimmed)) continue;
+
+            String lower = trimmed.toLowerCase();
+            if ((lower.contains(' from ') || lower.startsWith('from ')) && !(trimmed.startsWith('(') && trimmed.endsWith(')'))) {
+                throw new AuraHandledException('Invalid token: FROM keyword detected in fields configuration.');
+            }
+            if ((lower.contains(' where ') || lower.startsWith('where ')) && !(trimmed.startsWith('(') && trimmed.endsWith(')'))) {
+                throw new AuraHandledException('Invalid token: WHERE keyword detected in fields configuration.');
+            }
+
+            if (trimmed.startsWith('(') && trimmed.endsWith(')')) {
+                validateSubquery(trimmed, baseObject);
+                validatedFields.add(trimmed);
+            } else if (trimmed.contains('.')) {
+                validateParentPath(trimmed, baseObject);
+                validatedFields.add(trimmed);
+            } else {
+                validateSimpleField(trimmed, baseObject);
+                validatedFields.add(trimmed);
+            }
+        }
+
+        if (validatedFields.isEmpty()) {
+            throw new AuraHandledException('No valid fields found in configuration.');
+        }
+
+        return String.join(validatedFields, ', ');
+    }
+
+    private static String stripComments(String input) {
+        Integer startIdx = input.indexOf('/*');
+        while (startIdx >= 0) {
+            Integer endIdx = input.indexOf('*/', startIdx + 2);
+            if (endIdx == -1) {
+                throw new AuraHandledException('Unclosed block comment in fields configuration.');
+            }
+            input = input.substring(0, startIdx) + ' ' + input.substring(endIdx + 2);
+            startIdx = input.indexOf('/*');
+        }
+
+        List<String> lines = input.split('\n');
+        List<String> cleanedLines = new List<String>();
+        for (String line : lines) {
+            String cleanedLine = line;
+            Integer slashIdx = cleanedLine.indexOf('//');
+            if (slashIdx >= 0) cleanedLine = cleanedLine.substring(0, slashIdx);
+            Integer dashIdx = cleanedLine.indexOf('--');
+            if (dashIdx >= 0) cleanedLine = cleanedLine.substring(0, dashIdx);
+            cleanedLines.add(cleanedLine);
+        }
+        return String.join(cleanedLines, '\n');
+    }
+
+    private static List<String> tokenizeByTopLevelCommas(String input) {
+        List<String> tokens = new List<String>();
+        Integer depth = 0;
+        String current = '';
+        for (Integer i = 0; i < input.length(); i++) {
+            String ch = input.substring(i, i + 1);
+            if (ch == '(') {
+                depth++;
+                current += ch;
+            } else if (ch == ')') {
+                depth--;
+                current += ch;
+            } else if (ch == ',' && depth == 0) {
+                tokens.add(current);
+                current = '';
+            } else {
+                current += ch;
+            }
+        }
+        if (String.isNotBlank(current)) {
+            tokens.add(current);
+        }
+        return tokens;
+    }
+
+    private static void validateSimpleField(String fieldName, String objectName) {
+        Map<String, Schema.SObjectType> gd = Schema.getGlobalDescribe();
+        Schema.SObjectType sot = gd.get(objectName);
+        if (sot == null) {
+            throw new AuraHandledException('Invalid object: ' + objectName);
+        }
+        Schema.DescribeSObjectResult desc = sot.getDescribe();
+        Map<String, Schema.SObjectField> fieldMap = desc.fields.getMap();
+        if (!fieldMap.containsKey(fieldName.toLowerCase())) {
+            throw new AuraHandledException('Invalid field: ' + fieldName + ' on object ' + objectName);
+        }
+    }
+
+    private static void validateParentPath(String path, String objectName) {
+        List<String> parts = path.split('\\.');
+        String currentObject = objectName;
+        for (Integer i = 0; i < parts.size(); i++) {
+            String part = parts[i].trim();
+            if (String.isBlank(part)) {
+                throw new AuraHandledException('Invalid empty segment in field path: ' + path);
+            }
+            Map<String, Schema.SObjectType> gd = Schema.getGlobalDescribe();
+            Schema.SObjectType sot = gd.get(currentObject);
+            if (sot == null) {
+                throw new AuraHandledException('Invalid object in path: ' + currentObject);
+            }
+            Schema.DescribeSObjectResult desc = sot.getDescribe();
+            Map<String, Schema.SObjectField> fieldMap = desc.fields.getMap();
+            Schema.SObjectField field = fieldMap.get(part.toLowerCase());
+            if (field == null) {
+                throw new AuraHandledException('Invalid field or relationship: ' + part + ' on ' + currentObject);
+            }
+            if (i < parts.size() - 1) {
+                Schema.DescribeFieldResult fieldDesc = field.getDescribe();
+                List<Schema.sObjectType> refs = fieldDesc.getReferenceTo();
+                if (refs == null || refs.isEmpty()) {
+                    throw new AuraHandledException('Field is not a relationship: ' + part);
+                }
+                currentObject = refs[0].getDescribe().getName();
+            }
+        }
+    }
+
+    private static void validateSubquery(String subquery, String objectName) {
+        String inner = subquery.substring(1, subquery.length() - 1).trim();
+        if (!inner.toLowerCase().startsWith('select ')) {
+            throw new AuraHandledException('Invalid subquery: missing SELECT.');
+        }
+
+        Pattern fromPattern = Pattern.compile('(?i)\\bFROM\\s+([a-zA-Z_]\\w*)');
+        Matcher fromMatcher = fromPattern.matcher(inner);
+        if (!fromMatcher.find()) {
+            throw new AuraHandledException('Invalid subquery: missing FROM clause.');
+        }
+
+        String childRelName = fromMatcher.group(1);
+
+        Map<String, Schema.SObjectType> gd = Schema.getGlobalDescribe();
+        Schema.SObjectType sot = gd.get(objectName);
+        if (sot == null) {
+            throw new AuraHandledException('Invalid object: ' + objectName);
+        }
+        Schema.DescribeSObjectResult desc = sot.getDescribe();
+        List<Schema.ChildRelationship> childRels = desc.getChildRelationships();
+
+        String childObjectName = null;
+        Boolean found = false;
+        for (Schema.ChildRelationship cr : childRels) {
+            if (cr.getRelationshipName() != null && cr.getRelationshipName().equalsIgnoreCase(childRelName)) {
+                found = true;
+                childObjectName = cr.getChildSObject().getDescribe().getName();
+                break;
+            }
+        }
+        if (!found) {
+            throw new AuraHandledException('Invalid child relationship: ' + childRelName);
+        }
+
+        String fieldsPart = inner.substring(7, fromMatcher.start()).trim();
+        List<String> subFields = tokenizeByTopLevelCommas(fieldsPart);
+        for (String sf : subFields) {
+            String trimmed = sf.trim();
+            if (String.isBlank(trimmed)) continue;
+            if (trimmed.contains('.')) {
+                validateParentPath(trimmed, childObjectName);
+            } else {
+                validateSimpleField(trimmed, childObjectName);
+            }
         }
     }
 

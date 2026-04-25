@@ -837,8 +837,8 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 const htmlString = this.base64ToUtf8String(templateData);
                 const template = window.Handlebars.compile(htmlString);
                 const renderedHtml = template(recordData, {
-                    allowProtoPropertiesByDefault: true,
-                    allowProtoMethodsByDefault: true
+                    allowProtoPropertiesByDefault: false,
+                    allowProtoMethodsByDefault: false
                 });
                 if (this.editTemplateOutputFormat === 'PDF') {
                     this.showToast('Info', 'Generating PDF Sample...', 'info');

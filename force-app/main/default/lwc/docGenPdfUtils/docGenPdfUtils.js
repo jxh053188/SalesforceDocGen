@@ -23,7 +23,7 @@ export function generatePdfFromIframe(iframe, messageData) {
     return new Promise((resolve, reject) => {
         // Define the handler function
         const messageHandler = (event) => {
-            // Validate origin if needed (e.g., event.origin === window.location.origin)
+            if (event.origin !== window.location.origin) return;
 
             const data = event.data;
             if (data && data.type === 'docgen_success') {
@@ -66,7 +66,7 @@ export function generatePdfFromIframe(iframe, messageData) {
             // We force the mode to 'returnBuffer' so the engine knows we want the ArrayBuffer back
             const payload = { ...messageData, mode: 'returnBuffer' };
             console.log('docGenPdfUtils: Dispatching generate request to iframe...', payload.fileName);
-            iframe.contentWindow.postMessage(payload, '*');
+            iframe.contentWindow.postMessage(payload, window.location.origin);
         } catch (e) {
             window.removeEventListener('message', messageHandler);
             reject(new Error('docGenPdfUtils: Failed to post message to iframe: ' + e.message));

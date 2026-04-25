@@ -535,149 +535,55 @@ private class DocGenTests {
         System.assert(documentXml.contains('Test Account'), 'Document should contain merged data when no CMT mappings match');
     }
 
-    @isTest(SeeAllData=true)
+    @isTest
     static void testGenerateDocumentWithAnchors() {
-        List<DocGen_DocuSign_Mapping__mdt> mappings = [
-            SELECT Merge_Field__c, Anchor_Tag__c, Template_Id__c
-            FROM DocGen_DocuSign_Mapping__mdt
-            WHERE Active__c = true
-            LIMIT 1
-        ];
-
-        DocGen_Template__c tpl;
-        Boolean hasMapping = false;
-        if (!mappings.isEmpty()) {
-            String templateId = mappings[0].Template_Id__c;
-            List<DocGen_Template__c> existing = [SELECT Id FROM DocGen_Template__c WHERE Id = :templateId LIMIT 1];
-            if (!existing.isEmpty()) {
-                tpl = existing[0];
-                hasMapping = true;
-            }
-        }
-
-        if (tpl == null) {
-            tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
-        }
-
-        Account acc = [SELECT Id, Name FROM Account LIMIT 1];
-
-        Blob docxBlob = createTestDocx('<w:document><w:body><w:p><w:r><w:t>{Name}</w:t></w:r></w:p></w:body></w:document>');
-        ContentVersion cv = new ContentVersion(
-            Title = 'AnchorTemplate',
-            PathOnClient = 'AnchorTemplate.docx',
-            VersionData = docxBlob,
-            IsMajorVersion = true
-        );
-        insert cv;
-        Id conDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id].ContentDocumentId;
-        ContentDocumentLink cdl = new ContentDocumentLink(
-            LinkedEntityId = tpl.Id,
-            ContentDocumentId = conDocId,
-            ShareType = 'V'
-        );
-        insert cdl;
+        Map<String, Object> data = new Map<String, Object>{
+            'Name' => 'Test Account'
+        };
+        Map<String, DocGen_DocuSign_Mapping__mdt> anchorMappings = new Map<String, DocGen_DocuSign_Mapping__mdt>{
+            'Name' => new DocGen_DocuSign_Mapping__mdt(
+                Merge_Field__c = 'Name',
+                Anchor_Tag__c = '/sn1/',
+                Anchor_Type__c = 'Text'
+            )
+        };
+        String xml = '<w:document><w:body><w:p><w:r><w:t>{Name}</w:t></w:r></w:p></w:body></w:document>';
 
         Test.startTest();
-        Id resultDocId = DocGenService.generateDocument(tpl.Id, acc.Id, true);
+        String result = DocGenService.processXml(xml, data, anchorMappings);
         Test.stopTest();
 
-        System.assertNotEquals(null, resultDocId, 'Should return a ContentDocumentId');
-
-        ContentVersion resultCv = [
-            SELECT Id, VersionData
-            FROM ContentVersion
-            WHERE ContentDocumentId = :resultDocId AND IsLatest = true
-            LIMIT 1
-        ];
-
-        Compression.ZipReader reader = new Compression.ZipReader(resultCv.VersionData);
-        String documentXml = reader.extract('word/document.xml').toString();
-
-        if (hasMapping) {
-            System.assert(documentXml.contains(mappings[0].Anchor_Tag__c), 'Anchor tag should appear in generated XML: ' + documentXml);
-        } else {
-            System.assert(documentXml.contains('Test Account'), 'Document should contain merged data when no matching CMT records exist in org');
-        }
+        System.assert(result.contains('/sn1/'), 'Anchor tag should appear in processed XML: ' + result);
+        System.assert(result.contains('Test Account'), 'Document should contain merged data');
     }
 
-    @isTest(SeeAllData=true)
+    @isTest
     static void testGenerateDocumentWithAnchorSuffixInLoop() {
-        List<DocGen_DocuSign_Mapping__mdt> mappings = [
-            SELECT Merge_Field__c, Anchor_Tag__c, Unique_Suffix_Field__c, Template_Id__c
-            FROM DocGen_DocuSign_Mapping__mdt
-            WHERE Active__c = true AND Unique_Suffix_Field__c != null
-            LIMIT 1
-        ];
-
-        Account acc;
-        DocGen_Template__c tpl;
-        Boolean hasSuffixMapping = false;
-
-        if (!mappings.isEmpty()) {
-            String templateId = mappings[0].Template_Id__c;
-            List<DocGen_Template__c> existing = [SELECT Id FROM DocGen_Template__c WHERE Id = :templateId LIMIT 1];
-            if (!existing.isEmpty()) {
-                tpl = existing[0];
-                hasSuffixMapping = true;
-                acc = [SELECT Id, Name FROM Account LIMIT 1];
+        Map<String, Object> data = new Map<String, Object>{
+            'Contacts' => new Map<String, Object>{
+                'records' => new List<Object>{
+                    new Map<String, Object>{ 'FirstName' => 'Alice', 'LastName' => 'Smith' },
+                    new Map<String, Object>{ 'FirstName' => 'Bob', 'LastName' => 'Jones' }
+                }
             }
-        }
-
-        if (tpl == null) {
-            acc = new Account(Name = 'Loop Account');
-            insert acc;
-
-            Contact con1 = new Contact(FirstName = 'Alice', LastName = 'Smith', AccountId = acc.Id);
-            Contact con2 = new Contact(FirstName = 'Bob', LastName = 'Jones', AccountId = acc.Id);
-            insert new List<Contact>{ con1, con2 };
-
-            tpl = new DocGen_Template__c(
-                Name = 'Loop Template',
-                Base_Object_API__c = 'Account',
-                Query_Config__c = 'Name, (SELECT FirstName, LastName FROM Contacts)',
-                Type__c = 'Word'
-            );
-            insert tpl;
-        }
-
-        Blob docxBlob = createTestDocx('<w:document><w:body><w:p><w:r><w:t>{#Contacts}{FirstName}{/Contacts}</w:t></w:r></w:p></w:body></w:document>');
-        ContentVersion cv = new ContentVersion(
-            Title = 'LoopTemplate',
-            PathOnClient = 'LoopTemplate.docx',
-            VersionData = docxBlob,
-            IsMajorVersion = true
-        );
-        insert cv;
-        Id conDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id].ContentDocumentId;
-        ContentDocumentLink cdl = new ContentDocumentLink(
-            LinkedEntityId = tpl.Id,
-            ContentDocumentId = conDocId,
-            ShareType = 'V'
-        );
-        insert cdl;
+        };
+        Map<String, DocGen_DocuSign_Mapping__mdt> anchorMappings = new Map<String, DocGen_DocuSign_Mapping__mdt>{
+            'FirstName' => new DocGen_DocuSign_Mapping__mdt(
+                Merge_Field__c = 'FirstName',
+                Anchor_Tag__c = '/sn1/',
+                Unique_Suffix_Field__c = 'LastName'
+            )
+        };
+        String xml = '<w:document><w:body><w:p><w:r><w:t>{#Contacts}{FirstName}{/Contacts}</w:t></w:r></w:p></w:body></w:document>';
 
         Test.startTest();
-        Id resultDocId = DocGenService.generateDocument(tpl.Id, acc.Id, true);
+        String result = DocGenService.processXml(xml, data, anchorMappings);
         Test.stopTest();
 
-        System.assertNotEquals(null, resultDocId, 'Should return a ContentDocumentId');
-
-        ContentVersion resultCv = [
-            SELECT Id, VersionData
-            FROM ContentVersion
-            WHERE ContentDocumentId = :resultDocId AND IsLatest = true
-            LIMIT 1
-        ];
-
-        Compression.ZipReader reader = new Compression.ZipReader(resultCv.VersionData);
-        String documentXml = reader.extract('word/document.xml').toString();
-
-        if (hasSuffixMapping) {
-            System.assert(documentXml.contains(mappings[0].Anchor_Tag__c), 'Anchor tag should appear in generated XML: ' + documentXml);
-        } else {
-            System.assert(documentXml.contains('Alice'), 'Loop content should be merged when no matching suffix CMT records exist in org: ' + documentXml);
-            System.assert(documentXml.contains('Bob'), 'Loop content should be merged when no matching suffix CMT records exist in org: ' + documentXml);
-        }
+        System.assert(result.contains('/sn1/-Smith'), 'Anchor tag with suffix should appear for Alice: ' + result);
+        System.assert(result.contains('/sn1/-Jones'), 'Anchor tag with suffix should appear for Bob: ' + result);
+        System.assert(result.contains('Alice'), 'Loop content should be merged');
+        System.assert(result.contains('Bob'), 'Loop content should be merged');
     }
 
     @isTest

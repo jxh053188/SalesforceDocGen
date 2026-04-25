@@ -87,6 +87,7 @@ public with sharing class DocGenService {
     // I can do it in two calls.
 
     
+    @TestVisible
     private static String processXml(String xml, Map<String, Object> data, Map<String, DocGen_DocuSign_Mapping__mdt> anchorMappings) {
         String output = '';
         Integer len = xml.length();

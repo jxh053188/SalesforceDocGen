@@ -28,7 +28,7 @@ public with sharing class DocGenDocuSignController {
                     contactIds.add(accounts[0].PersonContactId);
                 }
                 for (AccountContactRole acr : [
-                    SELECT ContactId FROM AccountContactRole WHERE AccountId = :recordId WITH USER_MODE
+                    SELECT ContactId FROM AccountContactRole WHERE AccountId = :recordId WITH USER_MODE LIMIT 100
                 ]) {
                     contactIds.add(acr.ContactId);
                 }
@@ -54,6 +54,7 @@ public with sharing class DocGenDocuSignController {
             WHERE Id IN :contactIds
             WITH USER_MODE
             ORDER BY Name ASC
+            LIMIT 100
         ];
     }
 

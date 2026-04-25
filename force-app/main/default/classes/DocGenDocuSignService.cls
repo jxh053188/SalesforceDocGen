@@ -26,27 +26,29 @@ public with sharing class DocGenDocuSignService {
             );
         }
 
-        Contact recipientContact = [
+        List<Contact> contacts = [
             SELECT Id, Name, Email
             FROM Contact
             WHERE Id = :targetContactId
             WITH USER_MODE
             LIMIT 1
         ];
-        if (recipientContact == null || String.isBlank(recipientContact.Email)) {
+        if (contacts.isEmpty() || String.isBlank(contacts[0].Email)) {
             throw new DocGenException('Resolved recipient Contact does not have a valid Email address.');
         }
+        Contact recipientContact = contacts[0];
 
-        ContentVersion cv = [
+        List<ContentVersion> cvs = [
             SELECT Id, Title
             FROM ContentVersion
             WHERE Id = :contentVersionId
             WITH USER_MODE
             LIMIT 1
         ];
-        if (cv == null) {
+        if (cvs.isEmpty()) {
             throw new DocGenException('Document ContentVersion not found.');
         }
+        ContentVersion cv = cvs[0];
 
         dfsle.Document doc = new dfsle.Document(
             Id = cv.Id,

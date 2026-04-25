@@ -1,4 +1,4 @@
-public without sharing class DocGenSignatureFinalizer {
+public with sharing class DocGenSignatureFinalizer {
     
     public class FinalizeRequest {
         @InvocableVariable(required=true description='The secure token for the signature request')

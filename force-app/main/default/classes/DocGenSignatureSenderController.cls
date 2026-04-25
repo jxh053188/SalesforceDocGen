@@ -25,7 +25,8 @@ public with sharing class DocGenSignatureSenderController {
         }
         Id contentVersionId = docs[0].LatestPublishedVersionId;
         // Generate cryptographic secure token
-        Blob hash = Crypto.generateDigest('SHA-256', Blob.valueOf(String.valueOf(System.now().getTime()) + Math.random() + signerEmail));
+        Blob aesKey = Crypto.generateAesKey(256);
+        Blob hash = Crypto.generateDigest('SHA-256', aesKey);
         String token = EncodingUtil.convertToHex(hash);
         
         DocGen_Signature_Request__c req = new DocGen_Signature_Request__c();

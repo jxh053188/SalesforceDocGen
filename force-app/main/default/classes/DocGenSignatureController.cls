@@ -1,4 +1,4 @@
-public without sharing class DocGenSignatureController {
+public with sharing class DocGenSignatureController {
 
     // Helper wrapper class for LWC response
     public class SignatureInitResponse {
@@ -82,7 +82,7 @@ public without sharing class DocGenSignatureController {
         // Update status to Viewed if it was merely Sent
         if (req.Status__c == 'Sent') {
             req.Status__c = 'Viewed';
-            update req;
+            SystemModeHelper.updateSignatureRequest(req);
         }
 
         res.isValid = true;
@@ -111,7 +111,7 @@ public without sharing class DocGenSignatureController {
                 cd.PreferencesAllowViewInBrowser = true;
                 cd.PreferencesLinkLatestVersion = true;
                 cd.PreferencesExpires = false;
-                insert cd; // System Mode
+                SystemModeHelper.insertContentDistribution(cd);
                 
                 cd = [SELECT DistributionPublicUrl FROM ContentDistribution WHERE Id = :cd.Id WITH SYSTEM_MODE LIMIT 1];
                 res.documentUrl = cd.DistributionPublicUrl;
@@ -152,7 +152,7 @@ public without sharing class DocGenSignatureController {
             
             // 3. Mark as signed (Update Request Status)
             req.Status__c = 'Signed';
-            update req;
+            SystemModeHelper.updateSignatureRequest(req);
 
             // 4. Create Audit Trail (Initial State)
             DocGen_Signature_Audit__c audit = new DocGen_Signature_Audit__c();
@@ -161,7 +161,7 @@ public without sharing class DocGenSignatureController {
             audit.Document_Hash_SHA256__c = 'PENDING_CLIENT_PDF'; // Will be updated by finishSignatureUpload
             audit.IP_Address__c = 'Captured via Client-Side Hybrid Flow';
             audit.User_Agent__c = 'Browser-Based Renderer';
-            insert audit;
+            SystemModeHelper.insertSignatureAudit(audit);
 
             return new Map<String, String>{
                 'base64' => EncodingUtil.base64Encode(stampedBlob),
@@ -190,10 +190,10 @@ public without sharing class DocGenSignatureController {
 
         try {
             // 1. Save PDF
-            Id contentDocId = DocGenController.saveGeneratedDocument(
-                req.Related_Record_Id__c, 
-                fileName, 
-                base64Pdf, 
+            Id contentDocId = SystemModeHelper.saveGeneratedDocument(
+                req.Related_Record_Id__c,
+                fileName,
+                base64Pdf,
                 'pdf'
             );
 
@@ -213,6 +213,28 @@ public without sharing class DocGenSignatureController {
             }
         } catch (Exception e) {
             throw new AuraHandledException('Finalization failed: ' + e.getMessage());
+        }
+    }
+
+    private without sharing class SystemModeHelper {
+        static void updateSignatureRequest(DocGen_Signature_Request__c req) { update req; }
+        static void insertSignatureAudit(DocGen_Signature_Audit__c audit) { insert audit; }
+        static void insertContentDistribution(ContentDistribution cd) { insert cd; }
+        static Id saveGeneratedDocument(Id recordId, String fileName, String base64Data, String extension) {
+            ContentVersion cv = new ContentVersion();
+            cv.Title = fileName;
+            cv.PathOnClient = fileName + (extension.startsWith('.') ? extension : '.' + extension);
+            cv.VersionData = EncodingUtil.base64Decode(base64Data);
+            cv.IsMajorVersion = true;
+            insert cv;
+            Id contentDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id WITH SYSTEM_MODE].ContentDocumentId;
+            ContentDocumentLink cdl = new ContentDocumentLink();
+            cdl.ContentDocumentId = contentDocId;
+            cdl.LinkedEntityId = recordId;
+            cdl.ShareType = 'V';
+            cdl.Visibility = 'InternalUsers';
+            insert cdl;
+            return contentDocId;
         }
     }
 }

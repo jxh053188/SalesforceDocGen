@@ -54,7 +54,7 @@ public with sharing class DocGenController {
             cdl.ContentDocumentId = contentDocId;
             cdl.LinkedEntityId = recordId;
             cdl.ShareType = 'V';
-            cdl.Visibility = 'AllUsers';
+            cdl.Visibility = 'InternalUsers'; // Restrict to internal users only; prevents exposure to Experience Cloud external users
             insert cdl;
 
             return contentDocId;
@@ -68,7 +68,11 @@ public with sharing class DocGenController {
         if (recordId == null || String.isBlank(baseObject) || String.isBlank(queryConfig)) {
             return null;
         }
-        
+
+        if (!FeatureManagement.checkPermission('DocGen_Administrator')) {
+            throw new DocGenException('Insufficient privileges: DocGen Administrator permission required.');
+        }
+
         try {
             return DocGenDataRetriever.getRecordData(recordId, baseObject, queryConfig);
         } catch (Exception e) {

@@ -1,4 +1,8 @@
-public without sharing class DocGenSignatureService {
+/**
+ * This class is declared with sharing. DML methods are intended to be called from Flow system context or from elevated inner helpers.
+ * Direct invocation from user context may fail if the user lacks object/field permissions.
+ */
+public with sharing class DocGenSignatureService {
 
     public class SignatureException extends Exception {}
 
@@ -100,7 +104,7 @@ public without sharing class DocGenSignatureService {
             cdl.ContentDocumentId = newDocId;
             cdl.LinkedEntityId = relatedRecordId;
             cdl.ShareType = 'V';
-            cdl.Visibility = 'AllUsers';
+            cdl.Visibility = 'InternalUsers'; // Restrict to internal users only; prevents exposure to Experience Cloud external users
             insert cdl; 
         }
 

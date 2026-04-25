@@ -88,6 +88,77 @@ private class DocGenDocuSignControllerTest {
     }
 
     @isTest
+    static void testGetTemplatesForRecord_Null() {
+        Test.startTest();
+        List<DocGen_Template__c> templates = DocGenDocuSignController.getTemplatesForRecord(null);
+        Test.stopTest();
+
+        System.assertEquals(0, templates.size(), 'Should return empty list for null recordId');
+    }
+
+    @isTest
+    static void testGetRelatedContacts_Account() {
+        Account acc = new Account(Name = 'Test Account');
+        insert acc;
+
+        Contact con1 = new Contact(FirstName = 'Test1', LastName = 'User1', Email = 'test1@example.com', AccountId = acc.Id);
+        Contact con2 = new Contact(FirstName = 'Test2', LastName = 'User2', Email = 'test2@example.com', AccountId = acc.Id);
+        insert new List<Contact>{ con1, con2 };
+
+        AccountContactRole acr = new AccountContactRole(AccountId = acc.Id, ContactId = con1.Id, IsPrimary = true);
+        insert acr;
+
+        Test.startTest();
+        List<Contact> contacts = DocGenDocuSignController.getRelatedContacts(acc.Id);
+        Test.stopTest();
+
+        System.assertEquals(2, contacts.size(), 'Should return both account contacts');
+        Set<Id> contactIds = new Set<Id>{ con1.Id, con2.Id };
+        System.assert(contactIds.contains(contacts[0].Id), 'Should include expected contacts');
+        System.assert(contactIds.contains(contacts[1].Id), 'Should include expected contacts');
+    }
+
+    @isTest
+    static void testGetRelatedContacts_Contract() {
+        Account acc = new Account(Name = 'Test Account');
+        insert acc;
+
+        Contact con = new Contact(FirstName = 'Test', LastName = 'User', Email = 'test@example.com', AccountId = acc.Id);
+        insert con;
+
+        Contract ct = new Contract(
+            AccountId = acc.Id,
+            CustomerSignedId = con.Id,
+            Status = 'Draft',
+            StartDate = Date.today(),
+            ContractTerm = 12
+        );
+        insert ct;
+
+        ContractContactRole ccr = new ContractContactRole(ContractId = ct.Id, ContactId = con.Id);
+        insert ccr;
+
+        Test.startTest();
+        List<Contact> contacts = DocGenDocuSignController.getRelatedContacts(ct.Id);
+        Test.stopTest();
+
+        System.assertEquals(1, contacts.size(), 'Should return contract contacts');
+        System.assertEquals(con.Id, contacts[0].Id, 'Should match contact ID');
+    }
+
+    @isTest
+    static void testGetRelatedContacts_Empty() {
+        Account acc = new Account(Name = 'Test Account');
+        insert acc;
+
+        Test.startTest();
+        List<Contact> contacts = DocGenDocuSignController.getRelatedContacts(acc.Id);
+        Test.stopTest();
+
+        System.assertEquals(0, contacts.size(), 'Should return empty list when no contacts found');
+    }
+
+    @isTest
     static void testGenerateAndSend_NoTemplate() {
         Account acc = new Account(Name = 'Test Account');
         insert acc;
@@ -102,6 +173,40 @@ private class DocGenDocuSignControllerTest {
         Test.stopTest();
 
         System.assert(threw, 'Should throw for null template');
+    }
+
+    @isTest
+    static void testGenerateAndSend_HtmlTemplateError() {
+        DocGen_Template__c tpl = new DocGen_Template__c(
+            Name = 'HTML Template',
+            Base_Object_API__c = 'Account',
+            Query_Config__c = 'Name',
+            Type__c = 'HTML'
+        );
+        insert tpl;
+
+        Account acc = new Account(Name = 'Test Account');
+        insert acc;
+
+        Contact con = new Contact(FirstName = 'Test', LastName = 'User', Email = 'test@example.com', AccountId = acc.Id);
+        insert con;
+
+        Boolean threw = false;
+        String message = '';
+        Test.startTest();
+        try {
+            DocGenDocuSignController.generateAndSend(tpl.Id, acc.Id, con.Id, 'Test');
+        } catch (AuraHandledException e) {
+            threw = true;
+            message = e.getMessage();
+        } catch (Exception e) {
+            threw = true;
+            message = e.getMessage();
+        }
+        Test.stopTest();
+
+        System.assert(threw, 'Should throw AuraHandledException for HTML template');
+        System.assert(message.contains('HTML templates are only supported'), message);
     }
 
     private static Blob createTestDocx(String documentXml) {

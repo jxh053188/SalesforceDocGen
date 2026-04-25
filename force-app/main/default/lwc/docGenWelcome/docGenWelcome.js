@@ -12,12 +12,4 @@ export default class DocGenWelcome extends NavigationMixin(LightningElement) {
         });
     }
 
-    navigateToBulk() {
-        this[NavigationMixin.Navigate]({
-            type: 'standard__navItemPage',
-            attributes: {
-                apiName: 'DocGen_Bulk_Gen' 
-            }
-        });
-    }
 }

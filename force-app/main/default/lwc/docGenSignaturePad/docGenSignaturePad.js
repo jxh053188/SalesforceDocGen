@@ -135,7 +135,7 @@ export default class DocGenSignaturePad extends LightningElement {
         const activeToken = this.token || this.secureToken;
 
         try {
-            console.log('DocGen: Capturing signature for backend Flow rendition');
+            console.log('DocGen: Capturing signature for backend Flow finalization');
             // 1. Get Signature Image
             const canvas = this.template.querySelector('.signature-pad');
             const dataUrl = canvas.toDataURL('image/png');

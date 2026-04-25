@@ -8,7 +8,7 @@ public without sharing class DocGenSignatureFinalizer {
         public String base64Image;
     }
 
-    @InvocableMethod(label='Finalize Signature Image' description='Stamps the signature onto the DOCX and enqueues the Server-Side PDF Rendition. Runs in System Context.')
+    @InvocableMethod(label='Finalize Signature Image' description='Stamps the signature onto the DOCX and finalizes the record.')
     public static void finalizeSignature(List<FinalizeRequest> requests) {
         for (FinalizeRequest req : requests) {
             System.debug('DocGen: Finalizing signature via Flow System Context for token: ' + req.token);

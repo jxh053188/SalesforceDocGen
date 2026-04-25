@@ -218,7 +218,7 @@ private class DocGenTests {
         Account acc = [SELECT Id FROM Account LIMIT 1];
 
         Test.startTest();
-        Map<String, Object> data = DocGenController.previewRecordData(acc.Id, 'Account', 'SELECT Id, Name');
+        Map<String, Object> data = DocGenController.previewRecordData(acc.Id, 'Account', 'Id, Name');
         Test.stopTest();
 
         System.assertNotEquals(null, data, 'Data should not be null');
@@ -228,7 +228,7 @@ private class DocGenTests {
     @isTest
     static void testPreviewRecordDataNullParams() {
         Test.startTest();
-        Map<String, Object> data = DocGenController.previewRecordData(null, 'Account', 'SELECT Id, Name');
+        Map<String, Object> data = DocGenController.previewRecordData(null, 'Account', 'Id, Name');
         Test.stopTest();
         System.assertEquals(null, data, 'Should return null for invalid params');
     }
@@ -366,7 +366,7 @@ private class DocGenTests {
         Account acc = [SELECT Id FROM Account LIMIT 1];
 
         Test.startTest();
-        Map<String, Object> data = DocGenDataRetriever.getRecordData(acc.Id, 'Account', 'SELECT Id, Name, AccountSource');
+        Map<String, Object> data = DocGenDataRetriever.getRecordData(acc.Id, 'Account', 'Id, Name, AccountSource');
         Test.stopTest();
 
         System.assertNotEquals(null, data, 'Data should not be null');
@@ -379,7 +379,7 @@ private class DocGenTests {
         Boolean threw = false;
         Test.startTest();
         try {
-            DocGenDataRetriever.getRecordData(null, 'Account', 'SELECT Id');
+            DocGenDataRetriever.getRecordData(null, 'Account', 'Id');
         } catch (Exception e) {
             threw = true;
         }
@@ -390,7 +390,7 @@ private class DocGenTests {
     @isTest
     static void testGetRecordDataNoResults() {
         Test.startTest();
-        Map<String, Object> data = DocGenDataRetriever.getRecordData(UserInfo.getUserId(), 'Account', 'SELECT Id FROM Account WHERE Name = \'NoMatch\'');
+        Map<String, Object> data = DocGenDataRetriever.getRecordData(UserInfo.getUserId(), 'Account', 'Id');
         Test.stopTest();
         System.assertEquals(null, data, 'Should return null when no records found');
     }

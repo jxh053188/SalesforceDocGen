@@ -25,8 +25,14 @@
 
 
             <div class="canvas-wrapper slds-m-bottom_medium">
-                <canvas 
-                    class="signature-pad" 
+                <span id="signature-instructions" class="slds-assistive-text">
+                    Use your mouse or finger to draw your signature inside the box.
+                </span>
+                <canvas
+                    class="signature-pad"
+                    role="img"
+                    aria-label="Signature pad"
+                    aria-describedby="signature-instructions"
                     onmousedown={handleMousedown}
                     onmousemove={handleMousemove}
                     onmouseup={handleMouseup}

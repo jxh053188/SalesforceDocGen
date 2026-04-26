@@ -1,5 +1,12 @@
 public with sharing class DocGenSignatureSenderController {
-    
+
+    /**
+     * Exception Convention:
+     * - Validation / business logic errors -> throw new DocGenException(...)
+     * - Errors surfaced to LWC/Aura components -> throw new AuraHandledException(...)
+     * - Unexpected system errors -> wrap in AuraHandledException with a generic message
+     */
+
     @AuraEnabled(cacheable=true)
     public static List<ContentVersion> getRelatedDocuments(Id recordId) {
         List<ContentDocumentLink> links = [SELECT ContentDocumentId FROM ContentDocumentLink WHERE LinkedEntityId = :recordId WITH USER_MODE];

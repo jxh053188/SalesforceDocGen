@@ -9,6 +9,20 @@
 
             <template if:true={isLoaded}>
                 <div class="slds-box slds-theme_default">
+                    <div class="slds-m-bottom_medium slds-p-around_small slds-theme_info slds-border_around">
+                        <h3 class="slds-text-heading_small slds-m-bottom_xx-small">
+                            <lightning-icon icon-name="utility:info" size="x-small" class="slds-m-right_x-small" variant="info"></lightning-icon>
+                            Experience Site Configuration
+                        </h3>
+                        <p class="slds-text-body_small">
+                            The Experience Site URL is used to generate public signature request links that guest users can access to sign documents.
+                            It should point to the page hosting the <strong>DocGen Signature Pad</strong> component.
+                        </p>
+                        <p class="slds-text-body_small slds-m-top_small slds-text-color_weak">
+                            Example: <code>https://docgen-portal.my.site.com/s/sign-document</code>
+                        </p>
+                    </div>
+
                     <div class="slds-form-element slds-m-bottom_medium">
                         <lightning-input
                             type="url"
@@ -16,9 +30,12 @@
                             placeholder="https://yoursite.com/s/sign"
                             value={experienceSiteUrl}
                             onchange={handleUrlChange}
-                            required>
+                            required
+                            message-when-value-missing="Please enter the Experience Site URL">
                         </lightning-input>
-                        <p class="slds-text-body_small slds-m-top_xx-small">Example: https://docgen-portal.my.site.com/s/sign-document</p>
+                        <p class="slds-text-body_small slds-m-top_xx-small slds-text-color_weak">
+                            Must start with https:// and include the full path to the signature page.
+                        </p>
                     </div>
 
                     <lightning-button variant="brand" label="Save Settings" onclick={handleSaveSettings}></lightning-button>

@@ -1,5 +1,12 @@
 public with sharing class DocGenSignatureController {
 
+    /**
+     * Exception Convention:
+     * - Validation / business logic errors -> throw new DocGenException(...)
+     * - Errors surfaced to LWC/Aura components -> throw new AuraHandledException(...)
+     * - Unexpected system errors -> wrap in AuraHandledException with a generic message
+     */
+
     private static final Set<String> TOKENS_IN_PROGRESS = new Set<String>();
 
     // Helper wrapper class for LWC response

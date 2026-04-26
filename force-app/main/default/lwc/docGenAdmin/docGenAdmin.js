@@ -315,6 +315,10 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     }
 
     get queryBuilderSectionClass() {
+        // IMPORTANT: This builder lives OUTSIDE the lightning-tabset on purpose.
+        // If placed inside the tab and toggled with lwc:if, LWC destroys the component
+        // on tab switch, causing unsaved builder state to be lost before Save is clicked.
+        // We use slds-hide to keep it in the DOM while visually hiding it.
         const show = this.activeEditTab === 'query' && !this.isManualQuery;
         return show ? '' : 'slds-hide';
     }

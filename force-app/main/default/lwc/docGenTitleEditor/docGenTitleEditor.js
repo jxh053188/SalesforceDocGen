@@ -89,19 +89,30 @@ export default class DocGenTitleEditor extends LightningElement {
     
     parseFields() {
         if (!this.queryConfig) return [];
-        
-        // Basic parser: Split by comma, ignore subqueries `(SELECT ...)`
-        // 1. Remove subqueries
-        let clean = this.queryConfig.replace(/\(SELECT.*?\)/gi, ''); 
-        
-        // 2. Split
+
+        // Strip only top-level parenthesized blocks (e.g. subqueries)
+        let depth = 0;
+        let clean = '';
+        for (let i = 0; i < this.queryConfig.length; i++) {
+            const ch = this.queryConfig[i];
+            if (ch === '(') {
+                depth++;
+                continue;
+            }
+            if (ch === ')') {
+                depth--;
+                continue;
+            }
+            if (depth === 0) {
+                clean += ch;
+            }
+        }
+
         const tokens = clean.split(',');
-        
-        // 3. Trim and Filter
         const fields = tokens
             .map(t => t.trim())
-            .filter(t => t && !t.startsWith('(')); // Double check
-            
+            .filter(t => t && !t.startsWith('('));
+
         return fields;
     }
     

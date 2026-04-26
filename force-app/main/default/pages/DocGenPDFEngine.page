@@ -93,10 +93,19 @@
                             // HTML input: render directly into container then convert to PDF
                             console.log('PDF Engine: Rendering HTML...');
                             container.innerHTML = DOMPurify.sanitize(data.html);
-                            setTimeout(function() {
-                                console.log('PDF Engine: Converting HTML to PDF...');
+                            const observer = new MutationObserver((mutations, obs) => {
+                                if (container.childNodes.length > 0) {
+                                    obs.disconnect();
+                                    console.log('PDF Engine: DOM mutated, converting HTML to PDF...');
+                                    runHtml2Pdf();
+                                }
+                            });
+                            observer.observe(container, { childList: true, subtree: true });
+                            // Fallback maximum wait
+                            setTimeout(() => {
+                                observer.disconnect();
                                 runHtml2Pdf();
-                            }, 500);
+                            }, 2000);
                         } else {
                             // DOCX input: docx-preview then html2pdf
                             const blob = new Blob([data.blob], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
@@ -109,7 +118,7 @@
                                 experimental: true
                             });
                             console.log('PDF Engine: DOCX Rendered. Converting to PDF...');
-                            setTimeout(runHtml2Pdf, 1000);
+                            runHtml2Pdf();
                         }
                     } catch (e) {
                         console.error('Render Error', e);

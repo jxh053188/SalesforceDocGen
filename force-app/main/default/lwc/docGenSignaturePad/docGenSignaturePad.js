@@ -21,8 +21,6 @@ export default class DocGenSignaturePad extends LightningElement {
     @track isProcessing = false;
     isDrawing = false;
     isCanvasEmpty = true;
-    isDrawing = false;
-    isCanvasEmpty = true;
     
     // Canvas Context
     ctx;
@@ -36,6 +34,24 @@ export default class DocGenSignaturePad extends LightningElement {
 
     connectedCallback() {
         this.initData();
+        this._resizeHandler = this.debounce(() => {
+            this.initCanvas();
+        }, 150);
+        window.addEventListener('resize', this._resizeHandler);
+    }
+
+    disconnectedCallback() {
+        if (this._resizeHandler) {
+            window.removeEventListener('resize', this._resizeHandler);
+        }
+    }
+
+    debounce(fn, ms) {
+        let timeout;
+        return () => {
+            clearTimeout(timeout);
+            timeout = setTimeout(fn, ms);
+        };
     }
 
     async initData() {
@@ -67,7 +83,9 @@ export default class DocGenSignaturePad extends LightningElement {
         if (canvas) {
             const wrapper = this.template.querySelector('.canvas-wrapper');
             canvas.width = wrapper.offsetWidth;
-            canvas.height = 300; 
+            // Maintain a 3:1 aspect ratio, with a minimum usable height
+            // Note: resizing clears the canvas bitmap because width/height attrs are reset
+            canvas.height = Math.max(150, Math.round(wrapper.offsetWidth / 3));
 
             this.ctx = canvas.getContext('2d');
             this.ctx.strokeStyle = '#000000';

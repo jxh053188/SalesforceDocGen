@@ -28,7 +28,7 @@ public with sharing class DocGenDocuSignController {
             if (accountFields.containsKey('personcontactid')) {
                 accountQuery += ', PersonContactId';
             }
-            accountQuery += ' FROM Account WHERE Id = :recordId WITH USER_MODE LIMIT 1';
+            accountQuery += ' FROM Account WHERE Id = :recordId LIMIT 1';
             List<Account> accounts = Database.query(accountQuery, AccessLevel.USER_MODE);
             if (!accounts.isEmpty()) {
                 Account acc = accounts[0];

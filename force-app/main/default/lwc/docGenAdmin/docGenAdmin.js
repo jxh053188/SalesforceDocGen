@@ -300,13 +300,9 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     }
 
     refreshEditQueryBuilder() {
-        const builders = this.template.querySelectorAll('c-doc-gen-query-builder');
-        for (const b of builders) {
-            if (b.showTagsOnly === true) continue;
-            if (typeof b.refreshFromConfig === 'function') {
-                b.refreshFromConfig();
-                break;
-            }
+        const builder = this.template.querySelector('c-doc-gen-query-builder[data-mode="edit"]');
+        if (builder && typeof builder.refreshFromConfig === 'function') {
+            builder.refreshFromConfig();
         }
     }
 
@@ -564,33 +560,27 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         if (this.isManualQuery) {
             return this.editTemplateQuery || '';
         }
-        const builders = this.template.querySelectorAll('c-doc-gen-query-builder');
-        for (const b of builders) {
-            if (b.showTagsOnly === true) continue;
-            if (typeof b.getQueryConfig === 'function') {
-                const q = b.getQueryConfig();
-                if (q && typeof q === 'string' && q.trim().length > 0) return q;
-            }
+        const builder = this.template.querySelector('c-doc-gen-query-builder[data-mode="edit"]');
+        if (builder && typeof builder.getQueryConfig === 'function') {
+            const q = builder.getQueryConfig();
+            if (q && typeof q === 'string' && q.trim().length > 0) return q;
         }
         return this.editTemplateQuery || '';
     }
 
     getEditModeQueryMetadata() {
         if (this.isManualQuery) {
-            const builder = this.template.querySelector('c-doc-gen-query-builder:not([show-tags-only="true"])');
+            const builder = this.template.querySelector('c-doc-gen-query-builder[data-mode="edit"]');
             if (builder && typeof builder.convertSOQLToMetadata === 'function') {
                 const newMetadata = builder.convertSOQLToMetadata(this.editTemplateQuery, this.editTemplateObject);
                 if (newMetadata) return newMetadata;
             }
             return this.editTemplateMetadata || '';
         }
-        const builders = this.template.querySelectorAll('c-doc-gen-query-builder');
-        for (const b of builders) {
-            if (b.showTagsOnly === true) continue;
-            if (typeof b.getQueryMetadata === 'function') {
-                const qm = b.getQueryMetadata();
-                if (qm && typeof qm === 'string' && qm.trim().length > 0) return qm;
-            }
+        const builder = this.template.querySelector('c-doc-gen-query-builder[data-mode="edit"]');
+        if (builder && typeof builder.getQueryMetadata === 'function') {
+            const qm = builder.getQueryMetadata();
+            if (qm && typeof qm === 'string' && qm.trim().length > 0) return qm;
         }
         return this.editTemplateMetadata || '';
     }
@@ -705,6 +695,10 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             try {
                 const rawData = JSON.parse(JSON.stringify(result.data));
                 recordData = flattenData(rawData);
+                console.log('[docGenAdmin] Flattened recordData keys:', Object.keys(recordData));
+                if (recordData.Opportunities) {
+                    console.log('[docGenAdmin] Opportunities data:', JSON.stringify(recordData.Opportunities).substring(0, 500));
+                }
             } catch (jsonErr) {
                 throw new Error('Data sanitization failed: ' + jsonErr.message);
             }
@@ -716,32 +710,45 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                     throw new Error('Handlebars library not loaded.');
                 }
                 const renderedHtml = renderHtmlTemplate(templateData, recordData);
-                if (this.editTemplateOutputFormat === 'PDF') {
+
+                if (isPreview) {
+                    this.showToast('Info', 'Generating PDF Preview...', 'info');
+                    const iframe = this.template.querySelector('iframe');
+                    if (!iframe) {
+                        this.showToast('Error', 'PDF Engine not found in DOM.', 'error');
+                        return;
+                    }
+                    const messageData = {
+                        type: 'generate',
+                        html: renderedHtml,
+                        fileName: baseName
+                    };
+                    try {
+                        const pdfBlob = await orchestratePdfGeneration(iframe, messageData);
+                        await this._handleTestPdfBlobResult(pdfBlob, baseName, true);
+                    } catch (pdfErr) {
+                        console.error('[docGenAdmin] PDF preview failed:', pdfErr);
+                        this.showToast('PDF Error', pdfErr.message || 'Failed to generate PDF preview.', 'error');
+                    }
+                } else if (this.editTemplateOutputFormat === 'PDF') {
                     this.showToast('Info', 'Generating PDF Sample...', 'info');
                     const iframe = this.template.querySelector('iframe');
                     if (!iframe) {
                         this.showToast('Error', 'PDF Engine not found in DOM.', 'error');
                         return;
                     }
-
                     const messageData = {
                         type: 'generate',
                         html: renderedHtml,
                         fileName: baseName
                     };
-
                     const pdfBlob = await orchestratePdfGeneration(iframe, messageData);
-                    await this._handleTestPdfBlobResult(pdfBlob, baseName, isPreview);
-
+                    downloadBlob(pdfBlob, baseName + '.pdf');
+                    this.showToast('Success', 'Sample PDF downloaded.', 'success');
                 } else {
                     const blob = new Blob([renderedHtml], { type: 'application/octet-stream' });
-                    if (isPreview) {
-                        this.showToast('Warning', 'Preview is only supported for PDF output. Downloading instead.', 'warning');
-                        downloadBlob(blob, baseName + '.html');
-                    } else {
-                        downloadBlob(blob, baseName + '.html');
-                        this.showToast('Success', 'Sample HTML document downloaded.', 'success');
-                    }
+                    downloadBlob(blob, baseName + '.html');
+                    this.showToast('Success', 'Sample HTML document downloaded.', 'success');
                 }
                 return;
             }
@@ -752,24 +759,38 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             }
 
             const doc = renderDocxTemplate(templateData, recordData);
+
+            if (isPreview) {
+                const pdfGenResult = generateBlobFromDocx(doc, templateType, 'PDF');
+                this.showToast('Info', 'Generating PDF Preview...', 'info');
+                const iframe = this.template.querySelector('iframe');
+                if (!iframe) {
+                    this.showToast('Error', 'PDF Engine not found in DOM.', 'error');
+                    return;
+                }
+                const messageData = {
+                    type: 'generate',
+                    blob: pdfGenResult.blob,
+                    fileName: baseName
+                };
+                try {
+                    const pdfBlob = await orchestratePdfGeneration(iframe, messageData);
+                    await this._handleTestPdfBlobResult(pdfBlob, baseName, true);
+                } catch (pdfErr) {
+                    console.error('[docGenAdmin] PDF generation failed:', pdfErr);
+                    this.showToast('PDF Error', pdfErr.message || 'Failed to generate PDF preview.', 'error');
+                }
+                return;
+            }
+
             const { blob, extension, isPDF, isPPT } = generateBlobFromDocx(doc, templateType, this.editTemplateOutputFormat);
 
             if (isPPT) {
-                if (isPreview) {
-                    this.showToast('Warning', 'Preview is only supported for PDF output. Downloading instead.', 'warning');
-                    downloadBlob(blob, baseName + '.pptx');
-                } else {
-                    downloadBlob(blob, baseName + '.pptx');
-                    this.showToast('Success', 'Sample PowerPoint downloaded.', 'success');
-                }
+                downloadBlob(blob, baseName + '.pptx');
+                this.showToast('Success', 'Sample PowerPoint downloaded.', 'success');
             } else if (!isPDF) {
-                if (isPreview) {
-                    this.showToast('Warning', 'Preview is only supported for PDF output. Downloading instead.', 'warning');
-                    downloadBlob(blob, baseName + '.docx');
-                } else {
-                    downloadBlob(blob, baseName + '.docx');
-                    this.showToast('Success', 'Sample Word document downloaded.', 'success');
-                }
+                downloadBlob(blob, baseName + '.docx');
+                this.showToast('Success', 'Sample Word document downloaded.', 'success');
             } else {
                 this.showToast('Info', 'Generating PDF Sample...', 'info');
                 const iframe = this.template.querySelector('iframe');
@@ -777,15 +798,14 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                     this.showToast('Error', 'PDF Engine not found in DOM.', 'error');
                     return;
                 }
-
                 const messageData = {
                     type: 'generate',
                     blob: blob,
                     fileName: baseName
                 };
-
                 const pdfBlob = await orchestratePdfGeneration(iframe, messageData);
-                await this._handleTestPdfBlobResult(pdfBlob, baseName, isPreview);
+                downloadBlob(pdfBlob, baseName + '.pdf');
+                this.showToast('Success', 'Sample PDF downloaded.', 'success');
             }
 
         } catch (error) {

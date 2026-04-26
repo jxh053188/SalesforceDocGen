@@ -307,7 +307,7 @@
                     </lightning-tabset>
                     <!-- Single query builder outside tabset so it is always in DOM when modal is open (required for Save to read current state) -->
                     <div class={queryBuilderSectionClass}>
-                        <c-doc-gen-query-builder selected-object={editTemplateObject} query-config={editTemplateQuery}
+                        <c-doc-gen-query-builder data-mode="edit" selected-object={editTemplateObject} query-config={editTemplateQuery}
                             query-metadata={editTemplateMetadata} onconfigchange={handleEditConfigChange}>
                         </c-doc-gen-query-builder>
                     </div>
@@ -408,7 +408,8 @@
         <div class="slds-backdrop slds-backdrop_open"></div>
     </template>
 
-    <!-- Hidden PDF Engine: Position absolute/fixed off-screen so access to DOM/Window dimensions works -->
+    <!-- Hidden PDF Engine: Position absolute/fixed off-screen so access to DOM/Window dimensions works.
+         DO NOT use visibility:hidden — it blocks requestAnimationFrame and html2canvas paint cycles. -->
     <iframe src="/apex/DocGenPDFEngine"
-        style="position:fixed; top:-20000px; left:-20000px; width:1280px; height:1000px; border:none; visibility:hidden;"></iframe>
+        style="position:fixed; top:-20000px; left:-20000px; width:1280px; height:1000px; border:none; opacity:0; pointer-events:none;"></iframe>
 </template>

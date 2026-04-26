@@ -21,12 +21,20 @@ export function generatePdfFromIframe(iframe, messageData) {
     }
 
     return new Promise((resolve, reject) => {
+        const TIMEOUT_MS = 30000;
+
         // Define the handler function
         const messageHandler = (event) => {
-            if (event.origin !== window.location.origin) return;
-
+            // The PDF engine runs on a different Salesforce subdomain (Visualforce).
+            // We verify the payload structure instead of the origin.
             const data = event.data;
-            if (data && data.type === 'docgen_success') {
+            if (!data || (data.type !== 'docgen_success' && data.type !== 'docgen_error')) {
+                return;
+            }
+
+            window.clearTimeout(timeoutId);
+
+            if (data.type === 'docgen_success') {
                 window.removeEventListener('message', messageHandler);
 
                 // Expecting data.blob to be an ArrayBuffer from the updated engine
@@ -50,7 +58,7 @@ export function generatePdfFromIframe(iframe, messageData) {
                 } else {
                     reject(new Error('docGenPdfUtils: Success message received but no binary data was found.'));
                 }
-            } else if (data && data.type === 'docgen_error') {
+            } else if (data.type === 'docgen_error') {
                 window.removeEventListener('message', messageHandler);
                 reject(new Error('PDF Engine Error: ' + data.message));
             }
@@ -59,11 +67,19 @@ export function generatePdfFromIframe(iframe, messageData) {
         // Add the listener
         window.addEventListener('message', messageHandler);
 
+        // Reject if the engine doesn't respond in time
+        const timeoutId = window.setTimeout(() => {
+            window.removeEventListener('message', messageHandler);
+            reject(new Error('PDF generation timed out after ' + (TIMEOUT_MS / 1000) + ' seconds. The PDF engine may not be loaded or is unresponsive.'));
+        }, TIMEOUT_MS);
+
         try {
             // We force the mode to 'returnBuffer' so the engine knows we want the ArrayBuffer back
             const payload = { ...messageData, mode: 'returnBuffer' };
-            iframe.contentWindow.postMessage(payload, window.location.origin);
+            // Use '*' because the VF iframe lives on a different Salesforce subdomain
+            iframe.contentWindow.postMessage(payload, '*');
         } catch (e) {
+            window.clearTimeout(timeoutId);
             window.removeEventListener('message', messageHandler);
             reject(new Error('docGenPdfUtils: Failed to post message to iframe: ' + e.message));
         }

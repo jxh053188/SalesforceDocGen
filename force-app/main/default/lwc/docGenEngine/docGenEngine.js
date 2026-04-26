@@ -188,8 +188,8 @@ export function renderHtmlTemplate(templateBase64, recordData) {
 
 export function generateBlobFromDocx(doc, templateType, outputFormat) {
     const isPPT = templateType === 'PowerPoint';
-    const isPDF = outputFormat === 'PDF' && !isPPT;
-    if (isPPT) {
+    const isPDF = outputFormat === 'PDF';
+    if (isPPT && !isPDF) {
         return {
             blob: doc.getZip().generate({ type: 'blob' }),
             extension: 'pptx',
@@ -208,7 +208,7 @@ export function generateBlobFromDocx(doc, templateType, outputFormat) {
             blob: doc.getZip().generate({ type: 'arraybuffer' }),
             extension: 'pdf',
             isPDF: true,
-            isPPT: false
+            isPPT: isPPT
         };
     }
 }

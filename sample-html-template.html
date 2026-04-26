@@ -162,7 +162,6 @@
         </div>
       </div>
 
-      {{#ifList Opportunities "count" "Subscription_Amount__c" ">" 500}}
       <div class="section-title">Related Opportunities</div>
       <table>
         <thead>
@@ -173,16 +172,15 @@
           </tr>
         </thead>
         <tbody>
-          {{#each Opportunities}}
+          {{#Opportunities}}
           <tr>
             <td>{{Name}}</td>
             <td>{{Subscription_Amount__c}}</td>
             <td>{{CloseDate}}</td>
           </tr>
-          {{/each}}
+          {{/Opportunities}}
         </tbody>
       </table>
-      {{/ifList}}
     </div>
   </div>
 

@@ -58,37 +58,57 @@
         <script>
             // Listen for messages from LWC
             window.addEventListener('message', async function(event) {
-                if (event.origin !== window.location.origin) return;
+                // The parent LWC lives on a different Salesforce subdomain (Lightning).
+                // We verify the payload structure instead of the origin.
                 const data = event.data;
-                if (data.type === 'generate') {
-                    const container = document.getElementById('content-zone');
-                    container.innerHTML = '';
-                    container.style.display = 'block';
+                console.log('[DocGenPDFEngine] Message received:', data ? data.type : 'no data');
+                if (!data || data.type !== 'generate') return;
 
-                    function runHtml2Pdf() {
-                        const opt = {
-                            margin:       0,
-                            filename:     data.fileName + '.pdf',
-                            image:        { type: 'jpeg', quality: 0.98 },
-                            html2canvas:  { scale: 2, useCORS: true, letterRendering: true },
-                            jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' },
-                            pagebreak:    { mode: ['css', 'legacy'] }
-                        };
-                        const worker = html2pdf().from(container).set(opt);
-                        
-                        // We always want to return the ArrayBuffer now so the LWC can decide what to do
-                        // if data.mode === 'returnBuffer' or 'save'
-                        worker.output('arraybuffer').then(function(buffer) {
-                            sendSuccess(buffer, data.fileName);
-                        }).catch(function(err) {
-                            sendError('PDF Blob Generation Failed: ' + err.message);
+                const container = document.getElementById('content-zone');
+                container.innerHTML = '';
+                container.style.display = 'block';
+
+                function runHtml2Pdf() {
+                    console.log('[DocGenPDFEngine] Starting html2pdf generation...');
+                    const opt = {
+                        margin:       0,
+                        filename:     data.fileName + '.pdf',
+                        image:        { type: 'jpeg', quality: 0.98 },
+                        html2canvas:  { scale: 2, useCORS: true, letterRendering: true },
+                        jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' },
+                        pagebreak:    { mode: ['css', 'legacy'] }
+                    };
+                    const worker = html2pdf().from(container).set(opt);
+
+                    // We always want to return the ArrayBuffer now so the LWC can decide what to do
+                    // if data.mode === 'returnBuffer' or 'save'
+                    worker.output('arraybuffer').then(function(buffer) {
+                        console.log('[DocGenPDFEngine] html2pdf succeeded, sending buffer back.');
+                        sendSuccess(buffer, data.fileName);
+                    }).catch(function(err) {
+                        console.error('[DocGenPDFEngine] html2pdf failed:', err);
+                        sendError('PDF Blob Generation Failed: ' + err.message);
+                    });
+                }
+
+                try {
+                    if (data.html !== undefined && data.html !== null) {
+                        console.log('[DocGenPDFEngine] Processing HTML input...');
+                        // HTML input: render directly into container then convert to PDF
+                        container.innerHTML = DOMPurify.sanitize(data.html, {
+                            ADD_TAGS: ['style'],
+                            ADD_ATTR: ['style', 'class', 'id'],
+                            FORCE_BODY: true
                         });
-                    }
-
-                    try {
-                        if (data.html !== undefined && data.html !== null) {
-                            // HTML input: render directly into container then convert to PDF
-                            container.innerHTML = DOMPurify.sanitize(data.html);
+                        // innerHTML is synchronous; if content already exists, trigger PDF generation immediately.
+                        // Use setTimeout instead of requestAnimationFrame because the iframe is offscreen
+                        // and browsers skip paint cycles for offscreen elements.
+                        if (container.childNodes.length > 0) {
+                            console.log('[DocGenPDFEngine] HTML content set, triggering PDF generation.');
+                            window.setTimeout(() => runHtml2Pdf(), 0);
+                        } else {
+                            // Wait for async content (images, etc.) if initial HTML is empty
+                            console.log('[DocGenPDFEngine] HTML content empty, waiting for mutations.');
                             const observer = new MutationObserver((mutations, obs) => {
                                 if (container.childNodes.length > 0) {
                                     obs.disconnect();
@@ -96,34 +116,39 @@
                                 }
                             });
                             observer.observe(container, { childList: true, subtree: true });
-                        } else {
-                            // DOCX input: docx-preview then html2pdf
-                            const blob = new Blob([data.blob], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
-                            await docx.renderAsync(blob, container, null, {
-                                className: 'docx_viewer',
-                                inWrapper: false,
-                                ignoreWidth: true,
-                                ignoreHeight: false,
-                                experimental: true
-                            });
-                            runHtml2Pdf();
                         }
-                    } catch (e) {
-                        sendError('Render Error: ' + e.message);
+                    } else {
+                        console.log('[DocGenPDFEngine] Processing DOCX input...');
+                        // DOCX input: docx-preview then html2pdf
+                        const blob = new Blob([data.blob], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+                        await docx.renderAsync(blob, container, null, {
+                            className: 'docx_viewer',
+                            inWrapper: false,
+                            ignoreWidth: true,
+                            ignoreHeight: false,
+                            experimental: true
+                        });
+                        console.log('[DocGenPDFEngine] DOCX rendered, triggering PDF generation.');
+                        runHtml2Pdf();
                     }
+                } catch (e) {
+                    console.error('[DocGenPDFEngine] Render error:', e);
+                    sendError('Render Error: ' + e.message);
                 }
             });
 
             function sendError(msg) {
-                window.parent.postMessage({ type: 'docgen_error', message: msg }, window.location.origin);
+                console.error('[DocGenPDFEngine] Sending error to parent:', msg);
+                window.parent.postMessage({ type: 'docgen_error', message: msg }, '*');
             }
 
             function sendSuccess(blob, fileName) {
+                console.log('[DocGenPDFEngine] Sending success to parent. Buffer size:', blob ? blob.byteLength : 0);
                 window.parent.postMessage({
                     type: 'docgen_success',
                     blob: blob,
                     fileName: fileName
-                }, window.location.origin);
+                }, '*');
             }
         </script>
     </body>

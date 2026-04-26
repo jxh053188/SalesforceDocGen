@@ -17,6 +17,11 @@ public with sharing class DocGenDataRetriever {
         if (fieldsPart.toLowerCase().startsWith('select ')) {
             fieldsPart = fieldsPart.substring(7).trim();
         }
+        // If a full SOQL was provided, extract just the field list (everything before top-level FROM)
+        Integer fromIndex = indexOfTopLevelFrom(fieldsPart);
+        if (fromIndex != -1) {
+            fieldsPart = fieldsPart.substring(0, fromIndex).trim();
+        }
         String validatedFields = validateFieldsConfig(fieldsPart, baseObject);
         String query = 'SELECT ' + validatedFields + ' FROM ' + baseObject + ' WHERE Id = :recordId LIMIT 1';
 
@@ -32,6 +37,28 @@ public with sharing class DocGenDataRetriever {
         } catch (Exception e) {
             throw new AuraHandledException('Error executing query. Details: ' + e.getMessage());
         }
+    }
+
+    /**
+     * Finds the first top-level FROM keyword (not inside parentheses) in a string.
+     * Returns the index of the F, or -1 if not found.
+     */
+    private static Integer indexOfTopLevelFrom(String input) {
+        Integer depth = 0;
+        for (Integer i = 0; i < input.length(); i++) {
+            String ch = input.substring(i, i + 1);
+            if (ch == '(') {
+                depth++;
+            } else if (ch == ')') {
+                depth--;
+            } else if (depth == 0 && i + 5 <= input.length()) {
+                String substr = input.substring(i, i + 5).toLowerCase();
+                if (substr == 'from ') {
+                    return i;
+                }
+            }
+        }
+        return -1;
     }
 
     private static String validateFieldsConfig(String fieldsConfig, String baseObject) {
@@ -182,10 +209,6 @@ public with sharing class DocGenDataRetriever {
             throw new DocGenException('Invalid subquery: missing FROM clause.');
         }
 
-        if (String.isNotBlank(innerQuery.substring(fromMatcher.end()).trim())) {
-            throw new DocGenException('Invalid subquery: extra clauses detected.');
-        }
-
         String childRelName = fromMatcher.group(1);
 
         Schema.DescribeSObjectResult describeResult = getDescribeResult(objectName, gd);
@@ -205,6 +228,33 @@ public with sharing class DocGenDataRetriever {
         }
 
         String fieldsPart = innerQuery.substring(7, fromMatcher.start()).trim();
+        String remainder = innerQuery.substring(fromMatcher.end()).trim();
+
+        // Security: reject dangerous keywords in the remainder (WHERE/ORDER BY/LIMIT are allowed)
+        if (String.isNotBlank(remainder)) {
+            String lowerRemainder = remainder.toLowerCase();
+            if (lowerRemainder.contains(' union ') || lowerRemainder.contains(';')) {
+                throw new DocGenException('Invalid subquery: disallowed keyword detected.');
+            }
+            // Prevent nested subqueries in the remainder (they would bypass field validation)
+            if (lowerRemainder.contains('select ')) {
+                throw new DocGenException('Invalid subquery: nested SELECT not allowed in clause.');
+            }
+            // Basic parentheses balance check
+            Integer parenDepth = 0;
+            for (Integer i = 0; i < remainder.length(); i++) {
+                String ch = remainder.substring(i, i + 1);
+                if (ch == '(') parenDepth++;
+                else if (ch == ')') parenDepth--;
+                if (parenDepth < 0) {
+                    throw new DocGenException('Invalid subquery: unbalanced parentheses in clause.');
+                }
+            }
+            if (parenDepth != 0) {
+                throw new DocGenException('Invalid subquery: unbalanced parentheses in clause.');
+            }
+        }
+
         List<String> subFields = tokenizeByTopLevelCommas(fieldsPart);
         List<String> validatedSubFields = new List<String>();
         for (String sf : subFields) {
@@ -222,7 +272,12 @@ public with sharing class DocGenDataRetriever {
             throw new DocGenException('No valid fields found in subquery.');
         }
 
-        return '(SELECT ' + String.join(validatedSubFields, ', ') + ' FROM ' + childRelName + ')';
+        String result = '(SELECT ' + String.join(validatedSubFields, ', ') + ' FROM ' + childRelName;
+        if (String.isNotBlank(remainder)) {
+            result += ' ' + remainder;
+        }
+        result += ')';
+        return result;
     }
 
     private static Map<String, Object> mapSObject(SObject record) {

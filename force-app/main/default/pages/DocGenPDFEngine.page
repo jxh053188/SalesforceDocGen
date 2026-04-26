@@ -96,11 +96,6 @@
                                 }
                             });
                             observer.observe(container, { childList: true, subtree: true });
-                            // Fallback maximum wait
-                            setTimeout(() => {
-                                observer.disconnect();
-                                runHtml2Pdf();
-                            }, 2000);
                         } else {
                             // DOCX input: docx-preview then html2pdf
                             const blob = new Blob([data.blob], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });

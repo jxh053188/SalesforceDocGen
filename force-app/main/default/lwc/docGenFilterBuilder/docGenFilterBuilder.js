@@ -1,4 +1,5 @@
 import { LightningElement, api, track, wire } from 'lwc';
+import { ShowToastEvent } from 'lightning/platformShowToastEvent';
 import getObjectFields from '@salesforce/apex/DocGenController.getObjectFields';
 
 export default class DocGenFilterBuilder extends LightningElement {
@@ -34,7 +35,7 @@ export default class DocGenFilterBuilder extends LightningElement {
                 this.handleAddRow();
             }
         } else if (error) {
-            console.error(error);
+            this.dispatchEvent(new ShowToastEvent({ title: 'Error', message: 'Failed to load field options.', variant: 'error' }));
         }
         this.isLoading = false;
     }

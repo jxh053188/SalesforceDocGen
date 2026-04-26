@@ -153,7 +153,6 @@ export default class DocGenSignaturePad extends LightningElement {
         const activeToken = this.token || this.secureToken;
 
         try {
-            console.log('DocGen: Capturing signature for backend Flow finalization');
             // 1. Get Signature Image
             const canvas = this.template.querySelector('.signature-pad');
             const dataUrl = canvas.toDataURL('image/png');
@@ -164,7 +163,6 @@ export default class DocGenSignaturePad extends LightningElement {
 
             // 2. AUTO-ADVANCE FLOW
             if (this.availableActions && this.availableActions.find(action => action === 'NEXT')) {
-                console.log('DocGen: Navigating to NEXT screen...');
                 const navigateNextEvent = new FlowNavigationNextEvent();
                 this.dispatchEvent(navigateNextEvent);
             }

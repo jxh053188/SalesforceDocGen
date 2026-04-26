@@ -98,7 +98,7 @@ public class DocGenSignatureSenderControllerTest {
         Account acc = new Account(Name = 'Missing Doc Account');
         insert acc;
 
-        Id bogusContentDocId = Id.valueOf('069000000000000AAA');
+        Id bogusContentDocId = Id.valueOf(Schema.SObjectType.ContentDocument.getKeyPrefix() + '000000000000AAA');
 
         Test.startTest();
         Boolean exceptionThrown = false;

@@ -83,7 +83,7 @@ public with sharing class DocGenController {
         try {
             return DocGenDataRetriever.getRecordData(recordId, baseObject, queryConfig);
         } catch (Exception e) {
-            throw new DocGenException('Error fetching preview data: ' + e.getMessage());
+            throw new AuraHandledException('Error fetching preview data: ' + e.getMessage());
         }
     }
     
@@ -238,7 +238,7 @@ public with sharing class DocGenController {
             update template;
             
         } catch (Exception e) {
-            throw new DocGenException('Error activating version: ' + e.getMessage());
+            throw new AuraHandledException('Error activating version: ' + e.getMessage());
         }
     }
 

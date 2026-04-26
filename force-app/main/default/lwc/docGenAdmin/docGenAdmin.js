@@ -30,9 +30,8 @@ import PIZZIP_JS from '@salesforce/resourceUrl/pizzip';
 import DOCXTEMPLATER_JS from '@salesforce/resourceUrl/docxtemplater';
 import FILESAVER_JS from '@salesforce/resourceUrl/filesaver';
 import HANDLEBARS_JS from '@salesforce/resourceUrl/handlebars';
-import { generatePdfFromIframe } from 'c/docGenPdfUtils';
 import DocGenPreviewModal from 'c/docGenPreviewModal';
-import { registerHandlebarsHelpers, base64ToUtf8String, base64ToBinaryUint8Array, flattenData, configureDocxtemplater, renderDocxTemplate, renderHtmlTemplate, generateBlobFromDocx, orchestratePdfGeneration, downloadBlob } from 'c/docGenEngine';
+import { flattenData, renderDocxTemplate, renderHtmlTemplate, generateBlobFromDocx, orchestratePdfGeneration, downloadBlob } from 'c/docGenEngine';
 
 const COLUMNS = [
     { label: 'Category', fieldName: 'Category__c', initialWidth: 150 },
@@ -192,7 +191,6 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             })
         ))
             .then(() => {
-                console.log('DocGen Admin: Libraries loaded successfully');
                 this.librariesReady = true;
             })
             .catch(err => {
@@ -200,7 +198,6 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 console.warn('DocGen Admin: Library load failed.', msg);
                 this.librariesReady = false;
             });
-        console.log(window.Handlebars);
     }
 
     // --- Wizard Logic ---
@@ -402,10 +399,8 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
 
     // --- Row Action ---
     async handleRowAction(event) {
-        console.log('Row Action Triggered:', event.detail.action.name);
         const actionName = event.detail.action.name;
         const row = event.detail.row;
-        console.log('Row Data:', JSON.parse(JSON.stringify(row)));
 
         if (actionName === 'delete') {
             try {
@@ -427,7 +422,6 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
 
     // --- Edit Modal ---
     openEditModal(row, activeTab) {
-        console.log('Opening Edit Modal...', activeTab);
         try {
             this.editTemplateId = row.Id;
             this.editTemplateName = row.Name;
@@ -469,7 +463,6 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             this.isEditModalOpen = true;
             setTimeout(() => this.refreshEditQueryBuilder(), 400);
         } catch (e) {
-            console.error('Error opening Edit Modal:', e);
             this.showToast('Error', 'Failed to open modal: ' + e.message, 'error');
         }
     }
@@ -511,7 +504,6 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 });
             })
             .catch(error => {
-                console.error('Error loading versions', error);
                 this.versions = [];
             });
     }
@@ -672,12 +664,10 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     }
 
     async handleTestPreview() {
-        console.log('DEBUG: handleTestPreview called');
         await this._runTestGenerationFlow(true);
     }
 
     async handleTestGenerate() {
-        console.log('DEBUG: handleTestGenerate (Generate Sample) called');
         await this._runTestGenerationFlow(false);
     }
 
@@ -700,7 +690,6 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
 
         try {
             // 3. fetch Data
-            console.log('Fetching data for template:', this.editTemplateId, 'record:', this.editTemplateTestRecordId);
             const result = await generateDocumentData({
                 templateId: this.editTemplateId,
                 recordId: this.editTemplateTestRecordId
@@ -714,8 +703,6 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             try {
                 const rawData = JSON.parse(JSON.stringify(result.data));
                 recordData = flattenData(rawData);
-                console.log('DocGen Admin: Record data:')
-                console.log(recordData);
             } catch (jsonErr) {
                 throw new Error('Data sanitization failed: ' + jsonErr.message);
             }
@@ -726,14 +713,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 if (!window.Handlebars) {
                     throw new Error('Handlebars library not loaded.');
                 }
-                registerHandlebarsHelpers();
-                console.log('DEBUG: HTML template. Rendering with Handlebars...');
-                const htmlString = base64ToUtf8String(templateData);
-                const template = window.Handlebars.compile(htmlString);
-                const renderedHtml = template(recordData, {
-                    allowProtoPropertiesByDefault: false,
-                    allowProtoMethodsByDefault: false
-                });
+                const renderedHtml = renderHtmlTemplate(templateData, recordData);
                 if (this.editTemplateOutputFormat === 'PDF') {
                     this.showToast('Info', 'Generating PDF Sample...', 'info');
                     const iframe = this.template.querySelector('iframe');
@@ -807,7 +787,6 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             }
 
         } catch (error) {
-            console.error('Test Generation Error:', error);
             this.showToast('Generation Error', error.message || error, 'error');
         } finally {
             this.isLoadingVersions = false;

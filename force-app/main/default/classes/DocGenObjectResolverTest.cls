@@ -1,286 +1,226 @@
 @isTest
 private class DocGenObjectResolverTest {
 
-    @isTest
-    static void testGetRelatedContacts_Opportunity() {
-        Account acc = new Account(Name = 'Test Account');
-        insert acc;
+    @TestSetup
+    static void setupData() {
+        Account acc1 = new Account(Name = 'Test Account 1');
+        Account acc2 = new Account(Name = 'Test Account 2');
+        insert new List<Account>{ acc1, acc2 };
 
-        Contact con = new Contact(FirstName = 'Test', LastName = 'User', Email = 'test@example.com', AccountId = acc.Id);
-        insert con;
+        Contact con1 = new Contact(FirstName = 'Test1', LastName = 'User1', Email = 'test1@example.com', AccountId = acc1.Id);
+        Contact con2 = new Contact(FirstName = 'Test2', LastName = 'User2', Email = 'test2@example.com', AccountId = acc1.Id);
+        insert new List<Contact>{ con1, con2 };
 
-        Opportunity opp = new Opportunity(
-            Name = 'Test Opp',
+        Opportunity oppWithContact = new Opportunity(
+            Name = 'Test Opp With Contact',
             StageName = 'Prospecting',
             CloseDate = Date.today(),
-            AccountId = acc.Id
+            AccountId = acc1.Id,
+            ContactId = con1.Id
         );
-        insert opp;
+        Opportunity oppNoContact = new Opportunity(
+            Name = 'Test Opp No Contact',
+            StageName = 'Prospecting',
+            CloseDate = Date.today(),
+            AccountId = acc2.Id
+        );
+        insert new List<Opportunity>{ oppWithContact, oppNoContact };
+
+        Contract ctWithSigner = new Contract(
+            AccountId = acc1.Id,
+            CustomerSignedId = con1.Id,
+            Status = 'Draft',
+            StartDate = Date.today(),
+            ContractTerm = 12
+        );
+        Contract ctNoSigner = new Contract(
+            AccountId = acc2.Id,
+            Status = 'Draft',
+            StartDate = Date.today(),
+            ContractTerm = 12
+        );
+        insert new List<Contract>{ ctWithSigner, ctNoSigner };
 
         OpportunityContactRole ocr = new OpportunityContactRole(
-            OpportunityId = opp.Id,
-            ContactId = con.Id
+            OpportunityId = oppWithContact.Id,
+            ContactId = con1.Id
         );
         insert ocr;
+
+        AccountContactRole acr1 = new AccountContactRole(AccountId = acc1.Id, ContactId = con1.Id, IsPrimary = true);
+        AccountContactRole acr2 = new AccountContactRole(AccountId = acc1.Id, ContactId = con2.Id);
+        insert new List<AccountContactRole>{ acr1, acr2 };
+
+        ContractContactRole ccr = new ContractContactRole(ContractId = ctWithSigner.Id, ContactId = con1.Id);
+        insert ccr;
+    }
+
+    @isTest
+    static void testGetRelatedContacts_Opportunity() {
+        Opportunity opp = [SELECT Id FROM Opportunity WHERE Name = 'Test Opp With Contact' LIMIT 1];
+        Contact con = [SELECT Id FROM Contact WHERE Email = 'test1@example.com' LIMIT 1];
 
         Test.startTest();
         List<Contact> contacts = DocGenObjectResolver.getRelatedContacts(opp.Id);
         Test.stopTest();
 
-        System.assertEquals(1, contacts.size(), 'Should return related contact');
-        System.assertEquals(con.Id, contacts[0].Id, 'Should match contact ID');
+        Assert.areEqual(1, contacts.size(), 'Should return related contact');
+        Assert.areEqual(con.Id, contacts[0].Id, 'Should match contact ID');
     }
 
     @isTest
     static void testGetRelatedContacts_OpportunityNoContact() {
-        Account acc = new Account(Name = 'Test Account');
-        insert acc;
-
-        Opportunity opp = new Opportunity(
-            Name = 'Test Opp',
-            StageName = 'Prospecting',
-            CloseDate = Date.today(),
-            AccountId = acc.Id
-        );
-        insert opp;
+        Opportunity opp = [SELECT Id FROM Opportunity WHERE Name = 'Test Opp No Contact' LIMIT 1];
 
         Test.startTest();
         List<Contact> contacts = DocGenObjectResolver.getRelatedContacts(opp.Id);
         Test.stopTest();
 
-        System.assertEquals(0, contacts.size(), 'Should return empty list when no Opportunity contacts');
+        Assert.areEqual(0, contacts.size(), 'Should return empty list when no Opportunity contacts');
     }
 
     @isTest
     static void testGetRelatedContacts_Account() {
-        Account acc = new Account(Name = 'Test Account');
-        insert acc;
-
-        Contact con1 = new Contact(FirstName = 'Test1', LastName = 'User1', Email = 'test1@example.com', AccountId = acc.Id);
-        Contact con2 = new Contact(FirstName = 'Test2', LastName = 'User2', Email = 'test2@example.com', AccountId = acc.Id);
-        insert new List<Contact>{ con1, con2 };
-
-        AccountContactRole acr1 = new AccountContactRole(AccountId = acc.Id, ContactId = con1.Id, IsPrimary = true);
-        AccountContactRole acr2 = new AccountContactRole(AccountId = acc.Id, ContactId = con2.Id);
-        insert new List<AccountContactRole>{ acr1, acr2 };
+        Account acc = [SELECT Id FROM Account WHERE Name = 'Test Account 1' LIMIT 1];
+        Contact con1 = [SELECT Id FROM Contact WHERE Email = 'test1@example.com' LIMIT 1];
+        Contact con2 = [SELECT Id FROM Contact WHERE Email = 'test2@example.com' LIMIT 1];
 
         Test.startTest();
         List<Contact> contacts = DocGenObjectResolver.getRelatedContacts(acc.Id);
         Test.stopTest();
 
-        System.assertEquals(2, contacts.size(), 'Should return both account contacts');
+        Assert.areEqual(2, contacts.size(), 'Should return both account contacts');
         Set<Id> contactIds = new Set<Id>{ con1.Id, con2.Id };
-        System.assert(contactIds.contains(contacts[0].Id), 'Should include expected contacts');
-        System.assert(contactIds.contains(contacts[1].Id), 'Should include expected contacts');
+        Assert.isTrue(contactIds.contains(contacts[0].Id), 'Should include expected contacts');
+        Assert.isTrue(contactIds.contains(contacts[1].Id), 'Should include expected contacts');
     }
 
     @isTest
     static void testGetRelatedContacts_AccountPersonAccountPath() {
         // PersonAccount fields may not exist in all orgs; this test verifies the path at minimum returns empty for regular accounts.
-        Account acc = new Account(Name = 'Test Account');
-        insert acc;
+        Account acc = [SELECT Id FROM Account WHERE Name = 'Test Account 2' LIMIT 1];
 
         Test.startTest();
         List<Contact> contacts = DocGenObjectResolver.getRelatedContacts(acc.Id);
         Test.stopTest();
 
         // For a regular account with no contact roles, the PersonAccount path should not add any contacts.
-        System.assertEquals(0, contacts.size(), 'Should return empty for regular account with no roles');
+        Assert.areEqual(0, contacts.size(), 'Should return empty for regular account with no roles');
     }
 
     @isTest
     static void testGetRelatedContacts_Contract() {
-        Account acc = new Account(Name = 'Test Account');
-        insert acc;
-
-        Contact con = new Contact(FirstName = 'Test', LastName = 'User', Email = 'test@example.com', AccountId = acc.Id);
-        insert con;
-
-        Contract ct = new Contract(
-            AccountId = acc.Id,
-            CustomerSignedId = con.Id,
-            Status = 'Draft',
-            StartDate = Date.today(),
-            ContractTerm = 12
-        );
-        insert ct;
-
-        ContractContactRole ccr = new ContractContactRole(ContractId = ct.Id, ContactId = con.Id);
-        insert ccr;
+        Contract ct = [SELECT Id FROM Contract WHERE Account.Name = 'Test Account 1' AND CustomerSignedId != null LIMIT 1];
+        Contact con = [SELECT Id FROM Contact WHERE Email = 'test1@example.com' LIMIT 1];
 
         Test.startTest();
         List<Contact> contacts = DocGenObjectResolver.getRelatedContacts(ct.Id);
         Test.stopTest();
 
-        System.assertEquals(1, contacts.size(), 'Should return contract contacts');
-        System.assertEquals(con.Id, contacts[0].Id, 'Should match contact ID');
+        Assert.areEqual(1, contacts.size(), 'Should return contract contacts');
+        Assert.areEqual(con.Id, contacts[0].Id, 'Should match contact ID');
     }
 
     @isTest
     static void testGetRelatedContacts_ContractNoSigner() {
-        Account acc = new Account(Name = 'Test Account');
-        insert acc;
-
-        Contract ct = new Contract(
-            AccountId = acc.Id,
-            Status = 'Draft',
-            StartDate = Date.today(),
-            ContractTerm = 12
-        );
-        insert ct;
+        Contract ct = [SELECT Id FROM Contract WHERE Account.Name = 'Test Account 2' AND CustomerSignedId = null LIMIT 1];
 
         Test.startTest();
         List<Contact> contacts = DocGenObjectResolver.getRelatedContacts(ct.Id);
         Test.stopTest();
 
-        System.assertEquals(0, contacts.size(), 'Should return empty list when Contract has no CustomerSignedId');
+        Assert.areEqual(0, contacts.size(), 'Should return empty list when Contract has no CustomerSignedId');
     }
 
     @isTest
     static void testGetRelatedContacts_UnsupportedObject() {
-        Account acc = new Account(Name = 'Test Account');
-        insert acc;
-
-        Contact con = new Contact(FirstName = 'Test', LastName = 'User', AccountId = acc.Id);
-        insert con;
+        Contact con = [SELECT Id FROM Contact WHERE Email = 'test1@example.com' LIMIT 1];
 
         Test.startTest();
         List<Contact> contacts = DocGenObjectResolver.getRelatedContacts(con.Id);
         Test.stopTest();
 
-        System.assertEquals(0, contacts.size(), 'Should return empty list for unsupported object type');
+        Assert.areEqual(0, contacts.size(), 'Should return empty list for unsupported object type');
     }
 
     @isTest
     static void testResolveDefaultRecipient_Opportunity() {
-        Account acc = new Account(Name = 'Test Account');
-        insert acc;
-
-        Contact con = new Contact(FirstName = 'Test', LastName = 'User', Email = 'test@example.com', AccountId = acc.Id);
-        insert con;
-
-        Opportunity opp = new Opportunity(
-            Name = 'Test Opp',
-            StageName = 'Prospecting',
-            CloseDate = Date.today(),
-            AccountId = acc.Id,
-            ContactId = con.Id
-        );
-        insert opp;
+        Opportunity opp = [SELECT Id, ContactId FROM Opportunity WHERE Name = 'Test Opp With Contact' LIMIT 1];
+        Contact con = [SELECT Id FROM Contact WHERE Email = 'test1@example.com' LIMIT 1];
 
         Test.startTest();
         Id resolvedId = DocGenObjectResolver.resolveDefaultRecipient(opp.Id);
         Test.stopTest();
 
-        System.assertEquals(con.Id, resolvedId, 'Should resolve Opportunity ContactId');
+        Assert.areEqual(con.Id, resolvedId, 'Should resolve Opportunity ContactId');
     }
 
     @isTest
     static void testResolveDefaultRecipient_OpportunityNoContact() {
-        Account acc = new Account(Name = 'Test Account');
-        insert acc;
-
-        Opportunity opp = new Opportunity(
-            Name = 'Test Opp',
-            StageName = 'Prospecting',
-            CloseDate = Date.today(),
-            AccountId = acc.Id
-        );
-        insert opp;
+        Opportunity opp = [SELECT Id FROM Opportunity WHERE Name = 'Test Opp No Contact' LIMIT 1];
 
         Test.startTest();
         Id resolvedId = DocGenObjectResolver.resolveDefaultRecipient(opp.Id);
         Test.stopTest();
 
-        System.assertEquals(null, resolvedId, 'Should return null when Opportunity has no ContactId');
+        Assert.isNull(resolvedId, 'Should return null when Opportunity has no ContactId');
     }
 
     @isTest
     static void testResolveDefaultRecipient_Account() {
-        Account acc = new Account(Name = 'Test Account');
-        insert acc;
-
-        Contact con = new Contact(FirstName = 'Test', LastName = 'User', Email = 'test@example.com', AccountId = acc.Id);
-        insert con;
-
-        AccountContactRole acr = new AccountContactRole(AccountId = acc.Id, ContactId = con.Id, IsPrimary = true);
-        insert acr;
+        Account acc = [SELECT Id FROM Account WHERE Name = 'Test Account 1' LIMIT 1];
+        Contact con = [SELECT Id FROM Contact WHERE Email = 'test1@example.com' LIMIT 1];
 
         Test.startTest();
         Id resolvedId = DocGenObjectResolver.resolveDefaultRecipient(acc.Id);
         Test.stopTest();
 
-        System.assertEquals(con.Id, resolvedId, 'Should resolve primary AccountContactRole');
+        Assert.areEqual(con.Id, resolvedId, 'Should resolve primary AccountContactRole');
     }
 
     @isTest
     static void testResolveDefaultRecipient_AccountPersonAccountPath() {
-        Account acc = new Account(Name = 'Test Account');
-        insert acc;
+        Account acc = [SELECT Id FROM Account WHERE Name = 'Test Account 2' LIMIT 1];
 
         Test.startTest();
         Id resolvedId = DocGenObjectResolver.resolveDefaultRecipient(acc.Id);
         Test.stopTest();
 
         // Regular account with no primary role should return null; this exercises the PersonAccount check path.
-        System.assertEquals(null, resolvedId, 'Should return null for regular account without primary role');
+        Assert.isNull(resolvedId, 'Should return null for regular account without primary role');
     }
 
     @isTest
     static void testResolveDefaultRecipient_Contract() {
-        Account acc = new Account(Name = 'Test Account');
-        insert acc;
-
-        Contact con = new Contact(FirstName = 'Test', LastName = 'User', Email = 'test@example.com', AccountId = acc.Id);
-        insert con;
-
-        Contract ct = new Contract(
-            AccountId = acc.Id,
-            CustomerSignedId = con.Id,
-            Status = 'Draft',
-            StartDate = Date.today(),
-            ContractTerm = 12
-        );
-        insert ct;
+        Contract ct = [SELECT Id FROM Contract WHERE Account.Name = 'Test Account 1' AND CustomerSignedId != null LIMIT 1];
+        Contact con = [SELECT Id FROM Contact WHERE Email = 'test1@example.com' LIMIT 1];
 
         Test.startTest();
         Id resolvedId = DocGenObjectResolver.resolveDefaultRecipient(ct.Id);
         Test.stopTest();
 
-        System.assertEquals(con.Id, resolvedId, 'Should resolve Contract CustomerSignedId');
+        Assert.areEqual(con.Id, resolvedId, 'Should resolve Contract CustomerSignedId');
     }
 
     @isTest
     static void testResolveDefaultRecipient_ContractNoSigner() {
-        Account acc = new Account(Name = 'Test Account');
-        insert acc;
-
-        Contract ct = new Contract(
-            AccountId = acc.Id,
-            Status = 'Draft',
-            StartDate = Date.today(),
-            ContractTerm = 12
-        );
-        insert ct;
+        Contract ct = [SELECT Id FROM Contract WHERE Account.Name = 'Test Account 2' AND CustomerSignedId = null LIMIT 1];
 
         Test.startTest();
         Id resolvedId = DocGenObjectResolver.resolveDefaultRecipient(ct.Id);
         Test.stopTest();
 
-        System.assertEquals(null, resolvedId, 'Should return null when Contract has no CustomerSignedId');
+        Assert.isNull(resolvedId, 'Should return null when Contract has no CustomerSignedId');
     }
 
     @isTest
     static void testResolveDefaultRecipient_UnsupportedObject() {
-        Account acc = new Account(Name = 'Test Account');
-        insert acc;
-        Contact con = new Contact(FirstName = 'Test', LastName = 'User', AccountId = acc.Id);
-        insert con;
+        Contact con = [SELECT Id FROM Contact WHERE Email = 'test1@example.com' LIMIT 1];
 
         Test.startTest();
         Id resolvedId = DocGenObjectResolver.resolveDefaultRecipient(con.Id);
         Test.stopTest();
 
-        System.assertEquals(null, resolvedId, 'Should return null for unsupported object type');
+        Assert.isNull(resolvedId, 'Should return null for unsupported object type');
     }
 }

@@ -37,6 +37,9 @@ public with sharing class DocGenSignatureController {
             List<ContentVersion> cvs = [SELECT VersionData FROM ContentVersion WHERE Id = :req.Source_Document_Id__c WITH SYSTEM_MODE LIMIT 1];
             if (!cvs.isEmpty()) {
                 res.templateBase64 = EncodingUtil.base64Encode(cvs[0].VersionData);
+            } else {
+                res.isValid = false;
+                res.errorMessage = 'Source document not found.';
             }
         }
         return res;

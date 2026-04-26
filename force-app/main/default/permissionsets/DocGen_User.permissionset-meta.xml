@@ -144,6 +144,16 @@
         <readable>true</readable>
     </fieldPermissions>
     <fieldPermissions>
+        <editable>false</editable>
+        <field>DocGen_Template__c.DocuSign_Envelope_Configuration__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>false</editable>
+        <field>DocGen_Template__c.DocuSign_Signer_Count__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
         <editable>true</editable>
         <field>DocGen_Template__c.Query_Config__c</field>
         <readable>true</readable>

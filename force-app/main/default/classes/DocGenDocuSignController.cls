@@ -1,5 +1,12 @@
 public with sharing class DocGenDocuSignController {
 
+    /**
+     * Exception Convention:
+     * - Validation / business logic errors -> throw new DocGenException(...)
+     * - Errors surfaced to LWC/Aura components -> throw new AuraHandledException(...)
+     * - Unexpected system errors -> wrap in AuraHandledException with a generic message
+     */
+
     @AuraEnabled(cacheable=true)
     public static List<DocGen_Template__c> getTemplatesForRecord(Id recordId) {
         if (recordId == null) return new List<DocGen_Template__c>();
@@ -10,52 +17,7 @@ public with sharing class DocGenDocuSignController {
     @AuraEnabled(cacheable=true)
     public static List<Contact> getRelatedContacts(Id recordId) {
         if (recordId == null) return new List<Contact>();
-        String objectApiName = String.valueOf(recordId.getSObjectType());
-        Set<Id> contactIds = new Set<Id>();
-
-        if (objectApiName == 'Opportunity') {
-            for (OpportunityContactRole ocr : [
-                SELECT ContactId FROM OpportunityContactRole WHERE OpportunityId = :recordId WITH USER_MODE
-            ]) {
-                contactIds.add(ocr.ContactId);
-            }
-        } else if (objectApiName == 'Account') {
-            List<Account> accounts = [
-                SELECT PersonContactId, IsPersonAccount FROM Account WHERE Id = :recordId WITH USER_MODE LIMIT 1
-            ];
-            if (!accounts.isEmpty()) {
-                if (accounts[0].IsPersonAccount == true && accounts[0].PersonContactId != null) {
-                    contactIds.add(accounts[0].PersonContactId);
-                }
-                for (AccountContactRole acr : [
-                    SELECT ContactId FROM AccountContactRole WHERE AccountId = :recordId WITH USER_MODE LIMIT 100
-                ]) {
-                    contactIds.add(acr.ContactId);
-                }
-            }
-        } else if (objectApiName == 'Contract') {
-            List<Contract> contracts = [
-                SELECT CustomerSignedId FROM Contract WHERE Id = :recordId WITH USER_MODE LIMIT 1
-            ];
-            if (!contracts.isEmpty() && contracts[0].CustomerSignedId != null) {
-                contactIds.add(contracts[0].CustomerSignedId);
-            }
-            for (ContractContactRole ccr : [
-                SELECT ContactId FROM ContractContactRole WHERE ContractId = :recordId WITH USER_MODE
-            ]) {
-                contactIds.add(ccr.ContactId);
-            }
-        }
-
-        if (contactIds.isEmpty()) return new List<Contact>();
-        return [
-            SELECT Id, Name, Email
-            FROM Contact
-            WHERE Id IN :contactIds
-            WITH USER_MODE
-            ORDER BY Name ASC
-            LIMIT 100
-        ];
+        return DocGenObjectResolver.getRelatedContacts(recordId);
     }
 
     @AuraEnabled
@@ -74,7 +36,7 @@ public with sharing class DocGenDocuSignController {
                 WITH USER_MODE LIMIT 1
             ];
             if (cvs.isEmpty()) {
-                throw new DocGenException('Generated document version not found.');
+                throw new AuraHandledException('Generated document version not found.');
             }
 
             String envelopeId = DocGenDocuSignService.sendDocumentForSignature(

@@ -6,7 +6,6 @@ public with sharing class DocGenService {
     }
 
     public static Id generateDocument(Id templateId, Id recordId, Boolean injectDocuSignAnchors) {
-        System.debug('Starting DocGen for Template: ' + templateId + ' Record: ' + recordId);
         Map<String, Object> dataMap;
         try {
             dataMap = DocGenController.generateDocumentData(templateId, recordId);
@@ -46,7 +45,12 @@ public with sharing class DocGenService {
             throw new DocGenException('Invalid data format.');
         }
 
-        Blob templateBlob = EncodingUtil.base64Decode(base64File);
+        Blob templateBlob;
+        try {
+            templateBlob = EncodingUtil.base64Decode(base64File);
+        } catch (System.StringException e) {
+            throw new DocGenException('Invalid Base64 template file content.');
+        }
         Compression.ZipReader reader = new Compression.ZipReader(templateBlob);
         Compression.ZipWriter writer = new Compression.ZipWriter();
 
@@ -81,12 +85,6 @@ public with sharing class DocGenService {
         return saveFile(resultBlob, docTitle, recordId, templateType);
     }
 
-    // ... (processXml etc omitted, assuming unchanged relative position) ...
-    // Wait, replacing lines 49-52 and 255-264
-    // Using multi_replace or separate calls?
-    // I can do it in two calls.
-
-    
     @TestVisible
     private static String processXml(String xml, Map<String, Object> data, Map<String, DocGen_DocuSign_Mapping__mdt> anchorMappings) {
         String output = '';
@@ -286,7 +284,6 @@ public with sharing class DocGenService {
                         }
                     }
                     if (!found) {
-                        System.debug('DocGen Debug: Key "' + part + '" not found in Map. Keys: ' + currentMap.keySet());
                         return null;
                     }
                 }
@@ -294,9 +291,8 @@ public with sharing class DocGenService {
                  SObject sobj = (SObject) current;
                  try {
                      current = sobj.get(part);
-                 } catch(Exception e) { 
-                     System.debug('DocGen Debug: Error retrieving field "' + part + '" from SObject ' + sobj + ': ' + e.getMessage());
-                     return null; 
+                 } catch(Exception e) {
+                     return null;
                  }
             } else {
                 return null;
@@ -308,16 +304,12 @@ public with sharing class DocGenService {
     
     private static Id saveFile(Blob fileBlob, String title, Id recordId, String type) {
         ContentVersion cv = new ContentVersion();
-        String baseName = (title != null ? title : 'Generated_Document');
-        if (!baseName.startsWith('Generated_') && title == null) baseName = 'Generated_' + baseName; 
-        // Logic: specific requirements? 
-        // User wants "create a title". 
-        // If title provided via format, use it exactly.
-        // If not, revert to old behavior: 'Generated_' + recordName.
-        
-        // Revised Logic:
-        if (title != null) baseName = title;
-        else baseName = 'Generated_' + (recordId != null ? 'Document' : 'File'); // Fallback fallback
+        String baseName;
+        if (title != null) {
+            baseName = title;
+        } else {
+            baseName = 'Generated_' + (recordId != null ? 'Document' : 'File');
+        }
         
         String ext = (type == 'PowerPoint') ? '.pptx' : '.docx';
         cv.Title = baseName;

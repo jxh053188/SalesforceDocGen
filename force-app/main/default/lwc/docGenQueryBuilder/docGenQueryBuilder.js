@@ -56,7 +56,7 @@ export default class DocGenQueryBuilder extends LightningElement {
                     try {
                         this.rootNodeConfig = JSON.parse(this.queryMetadata);
                     } catch (e) {
-                        console.error('Error parsing Query_Metadata__c', e);
+                        this.dispatchEvent(new ShowToastEvent({ title: 'Error', message: 'Failed to parse existing query metadata. Resetting to default.', variant: 'error' }));
                         // Fallback to init blank
                         this.initRootNode();
                     }
@@ -65,7 +65,7 @@ export default class DocGenQueryBuilder extends LightningElement {
                 }
             }
         } else if (error) {
-            console.error(error);
+            this.dispatchEvent(new ShowToastEvent({ title: 'Error', message: 'Failed to load object options.', variant: 'error' }));
         }
     }
 
@@ -144,7 +144,6 @@ export default class DocGenQueryBuilder extends LightningElement {
         try {
             return this.buildNodeSOQL(this.rootNodeConfig, true);
         } catch (e) {
-            console.error('SOQL Generation Error:', e);
             return 'ERROR: Could not generate SOQL. Check configuration.';
         }
     }
@@ -259,7 +258,7 @@ export default class DocGenQueryBuilder extends LightningElement {
                 this.rootNodeConfig = JSON.parse(this.queryMetadata);
                 // Also parse titleFormat if we had it, but that comes from wrapper.
             } catch (e) {
-                console.error('refreshFromConfig parse error', e);
+                this.dispatchEvent(new ShowToastEvent({ title: 'Error', message: 'Failed to refresh query configuration.', variant: 'error' }));
             }
         }
     }
@@ -347,7 +346,7 @@ export default class DocGenQueryBuilder extends LightningElement {
         try {
             success = document.execCommand('copy');
         } catch (err) {
-            console.error('Failed to copy tag', err);
+            // Silently degrade; user feedback follows via toast
         }
         document.body.removeChild(textarea);
 
@@ -391,7 +390,7 @@ export default class DocGenQueryBuilder extends LightningElement {
             const rootNode = this.parseSOQLNode(soqlString, 'root', baseObject, '');
             return JSON.stringify(rootNode);
         } catch (e) {
-            console.error('SOQL Parse Error', e);
+            this.dispatchEvent(new ShowToastEvent({ title: 'Error', message: 'Failed to parse SOQL string.', variant: 'error' }));
             return null;
         }
     }

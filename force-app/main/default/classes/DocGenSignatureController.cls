@@ -1,4 +1,13 @@
-public without sharing class DocGenSignatureController {
+public with sharing class DocGenSignatureController {
+
+    /**
+     * Exception Convention:
+     * - Validation / business logic errors -> throw new DocGenException(...)
+     * - Errors surfaced to LWC/Aura components -> throw new AuraHandledException(...)
+     * - Unexpected system errors -> wrap in AuraHandledException with a generic message
+     */
+
+    private static final Set<String> TOKENS_IN_PROGRESS = new Set<String>();
 
     // Helper wrapper class for LWC response
     public class SignatureInitResponse {
@@ -35,6 +44,9 @@ public without sharing class DocGenSignatureController {
             List<ContentVersion> cvs = [SELECT VersionData FROM ContentVersion WHERE Id = :req.Source_Document_Id__c WITH SYSTEM_MODE LIMIT 1];
             if (!cvs.isEmpty()) {
                 res.templateBase64 = EncodingUtil.base64Encode(cvs[0].VersionData);
+            } else {
+                res.isValid = false;
+                res.errorMessage = 'Source document not found.';
             }
         }
         return res;
@@ -44,7 +56,6 @@ public without sharing class DocGenSignatureController {
      * @description Called by the LWC upon load to verify the token is valid and hasn't been signed.
      */
     @AuraEnabled
-    @RemoteAction
     public static SignatureInitResponse validateToken(String token) {
         SignatureInitResponse res = new SignatureInitResponse();
         res.isValid = false;
@@ -54,12 +65,18 @@ public without sharing class DocGenSignatureController {
             return res;
         }
 
+        if (TOKENS_IN_PROGRESS.contains(token)) {
+            res.errorMessage = 'Token validation is already in progress. Please wait.';
+            return res;
+        }
+
         List<DocGen_Signature_Request__c> requests = [
             SELECT Id, Status__c, Signer_Name__c, Source_Document_Id__c, Related_Record_Id__c
             FROM DocGen_Signature_Request__c
             WHERE Secure_Token__c = :token
             WITH SYSTEM_MODE
             LIMIT 1
+            FOR UPDATE
         ];
 
         if (requests.isEmpty()) {
@@ -82,44 +99,50 @@ public without sharing class DocGenSignatureController {
         // Update status to Viewed if it was merely Sent
         if (req.Status__c == 'Sent') {
             req.Status__c = 'Viewed';
-            update req;
+            new SystemModeHelper().updateSignatureRequest(req);
         }
 
         res.isValid = true;
         res.signerName = req.Signer_Name__c;
-        
+
         // Lookup the ContentVersion to get the true title
         List<ContentVersion> cvs = [SELECT Id, Title FROM ContentVersion WHERE Id = :req.Source_Document_Id__c WITH SYSTEM_MODE LIMIT 1];
         if (!cvs.isEmpty()) {
             res.documentTitle = cvs[0].Title;
-            
-            // Try to find an existing ContentDistribution (Public Link)
-            List<ContentDistribution> dists = [
-                SELECT DistributionPublicUrl 
-                FROM ContentDistribution 
-                WHERE ContentVersionId = :cvs[0].Id
-                WITH SYSTEM_MODE LIMIT 1
-            ];
-            
-            if (!dists.isEmpty()) {
-                res.documentUrl = dists[0].DistributionPublicUrl;
-            } else {
-                // Generate a temporary one if it doesn't exist
-                ContentDistribution cd = new ContentDistribution();
-                cd.Name = 'Signature Preview - ' + cvs[0].Title;
-                cd.ContentVersionId = cvs[0].Id;
-                cd.PreferencesAllowViewInBrowser = true;
-                cd.PreferencesLinkLatestVersion = true;
-                cd.PreferencesExpires = false;
-                insert cd; // System Mode
-                
-                cd = [SELECT DistributionPublicUrl FROM ContentDistribution WHERE Id = :cd.Id WITH SYSTEM_MODE LIMIT 1];
-                res.documentUrl = cd.DistributionPublicUrl;
+
+            try {
+                TOKENS_IN_PROGRESS.add(token);
+
+                // Try to find an existing ContentDistribution (Public Link)
+                List<ContentDistribution> dists = [
+                    SELECT DistributionPublicUrl
+                    FROM ContentDistribution
+                    WHERE ContentVersionId = :cvs[0].Id
+                    WITH SYSTEM_MODE LIMIT 1
+                ];
+
+                if (!dists.isEmpty()) {
+                    res.documentUrl = dists[0].DistributionPublicUrl;
+                } else {
+                    // Generate a temporary one if it doesn't exist
+                    ContentDistribution cd = new ContentDistribution();
+                    cd.Name = 'Signature Preview - ' + cvs[0].Title;
+                    cd.ContentVersionId = cvs[0].Id;
+                    cd.PreferencesAllowViewInBrowser = true;
+                    cd.PreferencesLinkLatestVersion = true;
+                    cd.PreferencesExpires = false;
+                    new SystemModeHelper().insertContentDistribution(cd);
+
+                    cd = [SELECT DistributionPublicUrl FROM ContentDistribution WHERE Id = :cd.Id WITH SYSTEM_MODE LIMIT 1];
+                    res.documentUrl = cd.DistributionPublicUrl;
+                }
+            } finally {
+                TOKENS_IN_PROGRESS.remove(token);
             }
         } else {
             res.documentTitle = 'Confidential Document';
         }
-        
+
         return res;
     }
 
@@ -152,7 +175,7 @@ public without sharing class DocGenSignatureController {
             
             // 3. Mark as signed (Update Request Status)
             req.Status__c = 'Signed';
-            update req;
+            new SystemModeHelper().updateSignatureRequest(req);
 
             // 4. Create Audit Trail (Initial State)
             DocGen_Signature_Audit__c audit = new DocGen_Signature_Audit__c();
@@ -161,7 +184,7 @@ public without sharing class DocGenSignatureController {
             audit.Document_Hash_SHA256__c = 'PENDING_CLIENT_PDF'; // Will be updated by finishSignatureUpload
             audit.IP_Address__c = 'Captured via Client-Side Hybrid Flow';
             audit.User_Agent__c = 'Browser-Based Renderer';
-            insert audit;
+            new SystemModeHelper().insertSignatureAudit(audit);
 
             return new Map<String, String>{
                 'base64' => EncodingUtil.base64Encode(stampedBlob),
@@ -177,6 +200,9 @@ public without sharing class DocGenSignatureController {
      */
     @AuraEnabled
     public static void finishSignatureUpload(String token, String base64Pdf, String fileName) {
+        if (String.isBlank(base64Pdf)) {
+            throw new AuraHandledException('PDF data is required.');
+        }
         List<DocGen_Signature_Request__c> requests = [
             SELECT Id, Related_Record_Id__c
             FROM DocGen_Signature_Request__c
@@ -190,10 +216,10 @@ public without sharing class DocGenSignatureController {
 
         try {
             // 1. Save PDF
-            Id contentDocId = DocGenController.saveGeneratedDocument(
-                req.Related_Record_Id__c, 
-                fileName, 
-                base64Pdf, 
+            Id contentDocId = new SystemModeHelper().saveGeneratedDocument(
+                req.Related_Record_Id__c,
+                fileName,
+                base64Pdf,
                 'pdf'
             );
 
@@ -209,10 +235,33 @@ public without sharing class DocGenSignatureController {
             if (!audits.isEmpty()) {
                 String pdfHash = EncodingUtil.convertToHex(Crypto.generateDigest('SHA-256', EncodingUtil.base64Decode(base64Pdf)));
                 audits[0].Document_Hash_SHA256__c = pdfHash;
-                update audits;
+                new SystemModeHelper().updateSignatureAudit(audits);
             }
         } catch (Exception e) {
             throw new AuraHandledException('Finalization failed: ' + e.getMessage());
+        }
+    }
+
+    private without sharing class SystemModeHelper {
+        void updateSignatureRequest(DocGen_Signature_Request__c req) { update req; }
+        void insertSignatureAudit(DocGen_Signature_Audit__c audit) { insert audit; }
+        void updateSignatureAudit(List<DocGen_Signature_Audit__c> audits) { update audits; }
+        void insertContentDistribution(ContentDistribution cd) { insert cd; }
+        Id saveGeneratedDocument(Id recordId, String fileName, String base64Data, String extension) {
+            ContentVersion cv = new ContentVersion();
+            cv.Title = fileName;
+            cv.PathOnClient = fileName + (extension.startsWith('.') ? extension : '.' + extension);
+            cv.VersionData = EncodingUtil.base64Decode(base64Data);
+            cv.IsMajorVersion = true;
+            insert cv;
+            Id contentDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id WITH SYSTEM_MODE].ContentDocumentId;
+            ContentDocumentLink cdl = new ContentDocumentLink();
+            cdl.ContentDocumentId = contentDocId;
+            cdl.LinkedEntityId = recordId;
+            cdl.ShareType = 'V';
+            cdl.Visibility = 'InternalUsers';
+            insert cdl;
+            return contentDocId;
         }
     }
 }

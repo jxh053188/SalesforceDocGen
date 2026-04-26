@@ -96,7 +96,8 @@
         </value>
     </processMetadataValues>
     <processType>Flow</processType>
-    <runInMode>SystemModeWithoutSharing</runInMode>
+    <description>Runs in System Mode with Sharing. Privileged DML and record access (ContentVersion, ContentDistribution, Signature Request) are performed by the underlying Apex invocable actions using WITH SYSTEM_MODE queries and without-sharing inner helpers.</description>
+    <runInMode>SystemModeWithSharing</runInMode>
     <screens>
         <name>Error_Screen</name>
         <label>Error Screen</label>

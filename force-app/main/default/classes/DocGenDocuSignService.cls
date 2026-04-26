@@ -68,11 +68,7 @@ public with sharing class DocGenDocuSignService {
             .withEmail(subject, null);
 
         if (String.isNotBlank(overrideDocuSignTemplateId)) {
-            System.debug(LoggingLevel.INFO,
-                'DocGenDocuSignService: DocuSign template override is set to '
-                + overrideDocuSignTemplateId
-                + ' but template-based sending is stubbed for a future iteration.'
-            );
+            // DocuSign template override is stubbed for a future iteration.
         }
 
         if (Test.isRunningTest()) {
@@ -89,48 +85,7 @@ public with sharing class DocGenDocuSignService {
 
     @TestVisible
     private static Id resolveDefaultRecipient(Id recordId) {
-        String sObjectType = String.valueOf(recordId.getSObjectType());
-
-        if (sObjectType == 'Opportunity') {
-            List<Opportunity> opps = [
-                SELECT ContactId FROM Opportunity WHERE Id = :recordId WITH USER_MODE LIMIT 1
-            ];
-            if (!opps.isEmpty() && opps[0].ContactId != null) {
-                return opps[0].ContactId;
-            }
-        } else if (sObjectType == 'Contract') {
-            List<Contract> contracts = [
-                SELECT CustomerSignedId FROM Contract WHERE Id = :recordId WITH USER_MODE LIMIT 1
-            ];
-            if (!contracts.isEmpty() && contracts[0].CustomerSignedId != null) {
-                return contracts[0].CustomerSignedId;
-            }
-        } else if (sObjectType == 'Account') {
-            List<Account> accounts = [
-                SELECT PersonContactId, IsPersonAccount
-                FROM Account
-                WHERE Id = :recordId
-                WITH USER_MODE
-                LIMIT 1
-            ];
-            if (!accounts.isEmpty()) {
-                if (accounts[0].IsPersonAccount == true && accounts[0].PersonContactId != null) {
-                    return accounts[0].PersonContactId;
-                }
-                List<AccountContactRole> roles = [
-                    SELECT ContactId
-                    FROM AccountContactRole
-                    WHERE AccountId = :recordId AND IsPrimary = true
-                    WITH USER_MODE
-                    ORDER BY CreatedDate DESC
-                    LIMIT 1
-                ];
-                if (!roles.isEmpty()) {
-                    return roles[0].ContactId;
-                }
-            }
-        }
-
-        return null;
+        if (recordId == null) return null;
+        return DocGenObjectResolver.resolveDefaultRecipient(recordId);
     }
 }

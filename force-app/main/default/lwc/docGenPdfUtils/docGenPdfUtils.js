@@ -23,7 +23,7 @@ export function generatePdfFromIframe(iframe, messageData) {
     return new Promise((resolve, reject) => {
         // Define the handler function
         const messageHandler = (event) => {
-            // Validate origin if needed (e.g., event.origin === window.location.origin)
+            if (event.origin !== window.location.origin) return;
 
             const data = event.data;
             if (data && data.type === 'docgen_success') {
@@ -40,21 +40,18 @@ export function generatePdfFromIframe(iframe, messageData) {
                             pdfBlob = new Blob([data.blob], { type: 'application/pdf' });
                         }
 
-                        console.log('docGenPdfUtils: Successfully received PDF Blob.');
                         resolve(pdfBlob);
                     } catch (err) {
                         reject(new Error('docGenPdfUtils: Failed to convert engine output to Blob: ' + err.message));
                     }
                 } else if (data.isDirectDownload) {
                     // For backwards compatibility if any old engine still downloads
-                    console.log('docGenPdfUtils: Engine triggered a direct download.');
                     resolve(null);
                 } else {
                     reject(new Error('docGenPdfUtils: Success message received but no binary data was found.'));
                 }
             } else if (data && data.type === 'docgen_error') {
                 window.removeEventListener('message', messageHandler);
-                console.error('docGenPdfUtils: PDF Engine reported error:', data.message);
                 reject(new Error('PDF Engine Error: ' + data.message));
             }
         };
@@ -65,8 +62,7 @@ export function generatePdfFromIframe(iframe, messageData) {
         try {
             // We force the mode to 'returnBuffer' so the engine knows we want the ArrayBuffer back
             const payload = { ...messageData, mode: 'returnBuffer' };
-            console.log('docGenPdfUtils: Dispatching generate request to iframe...', payload.fileName);
-            iframe.contentWindow.postMessage(payload, '*');
+            iframe.contentWindow.postMessage(payload, window.location.origin);
         } catch (e) {
             window.removeEventListener('message', messageHandler);
             reject(new Error('docGenPdfUtils: Failed to post message to iframe: ' + e.message));

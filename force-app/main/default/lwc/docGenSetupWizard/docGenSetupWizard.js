@@ -13,7 +13,7 @@ export default class DocGenSetupWizard extends LightningElement {
             this.experienceSiteUrl = data.Experience_Site_Url__c || '';
             this.isLoaded = true;
         } else if (error) {
-            console.error('Error fetching settings', error);
+            this.dispatchEvent(new ShowToastEvent({ title: 'Error', message: 'Failed to load settings.', variant: 'error' }));
             this.isLoaded = true;
         }
     }
@@ -37,7 +37,7 @@ export default class DocGenSetupWizard extends LightningElement {
             })
             .catch(error => {
                 this.isLoaded = true;
-                console.error('Error saving settings', error);
+                this.dispatchEvent(new ShowToastEvent({ title: 'Error', message: 'Failed to save settings.', variant: 'error' }));
             });
     }
 }

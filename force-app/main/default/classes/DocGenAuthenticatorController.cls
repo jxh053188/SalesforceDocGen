@@ -1,12 +1,12 @@
-public without sharing class DocGenAuthenticatorController {
-    
+public with sharing class DocGenAuthenticatorController {
+
     @AuraEnabled
     public static VerificationResult verifyDocument(String fileHash) {
-        // We use without sharing to query the Audit table securely for public users
         List<DocGen_Signature_Audit__c> audits = [
             SELECT Id, Signed_Date__c, IP_Address__c, Signature_Request__r.Signer_Name__c, Signature_Request__r.Signer_Email__c
             FROM DocGen_Signature_Audit__c
             WHERE Document_Hash_SHA256__c = :fileHash
+            WITH SYSTEM_MODE
             LIMIT 1
         ];
 

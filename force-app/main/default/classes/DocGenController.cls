@@ -1,32 +1,39 @@
 public with sharing class DocGenController {
-    
+
+    /**
+     * Exception Convention:
+     * - Validation / business logic errors -> throw new DocGenException(...)
+     * - Errors surfaced to LWC/Aura components -> throw new AuraHandledException(...)
+     * - Unexpected system errors -> wrap in AuraHandledException with a generic message
+     */
+
     @AuraEnabled
     public static Map<String, Object> generateDocumentData(Id templateId, Id recordId) {
-        if (templateId == null) throw new DocGenException('Template ID is missing.');
-        
+        if (templateId == null) throw new AuraHandledException('Template ID is missing.');
+
         List<DocGen_Template__c> templates = [
             SELECT Base_Object_API__c, Query_Config__c, Query_Metadata__c, Type__c, Output_Format__c, Document_Title_Format__c
-            FROM DocGen_Template__c 
-            WHERE Id = :templateId 
+            FROM DocGen_Template__c
+            WHERE Id = :templateId
             WITH USER_MODE
             LIMIT 1
         ];
-        
+
         if (templates.isEmpty()) {
-            throw new DocGenException('Template not found or you do not have access.');
+            throw new AuraHandledException('Template not found or you do not have access.');
         }
         DocGen_Template__c template = templates[0];
-        
+
         Map<String, Object> recordData = DocGenDataRetriever.getRecordData(
-            recordId, 
-            template.Base_Object_API__c, 
+            recordId,
+            template.Base_Object_API__c,
             template.Query_Config__c
         );
-        
+
         String fileContent = DocGenTemplateManager.getTemplateFileContent(templateId);
-        
+
         if (recordData == null) {
-            throw new DocGenException('Record data not found.');
+            throw new AuraHandledException('Record data not found.');
         }
 
         return new Map<String, Object>{
@@ -54,12 +61,12 @@ public with sharing class DocGenController {
             cdl.ContentDocumentId = contentDocId;
             cdl.LinkedEntityId = recordId;
             cdl.ShareType = 'V';
-            cdl.Visibility = 'AllUsers';
+            cdl.Visibility = 'InternalUsers'; // Restrict to internal users only; prevents exposure to Experience Cloud external users
             insert cdl;
 
             return contentDocId;
         } catch (Exception e) {
-            throw new DocGenException('Error saving document to record: ' + e.getMessage());
+            throw new AuraHandledException('Error saving document to record: ' + e.getMessage());
         }
     }
 
@@ -68,11 +75,15 @@ public with sharing class DocGenController {
         if (recordId == null || String.isBlank(baseObject) || String.isBlank(queryConfig)) {
             return null;
         }
-        
+
+        if (!FeatureManagement.checkPermission('DocGen_Administrator')) {
+            throw new AuraHandledException('Insufficient privileges: DocGen Administrator permission required.');
+        }
+
         try {
             return DocGenDataRetriever.getRecordData(recordId, baseObject, queryConfig);
         } catch (Exception e) {
-            throw new DocGenException('Error fetching preview data: ' + e.getMessage());
+            throw new AuraHandledException('Error fetching preview data: ' + e.getMessage());
         }
     }
     
@@ -112,14 +123,11 @@ public with sharing class DocGenController {
             template.Query_Metadata__c = (String) fields.get('Query_Metadata__c');
             template.Test_Record_Id__c = (String) fields.get('Test_Record_Id__c');
             template.Document_Title_Format__c = (String) fields.get('Document_Title_Format__c');
-            
-            update template;
-            
-            // Update Output Format if provided
             if (fields.containsKey('Output_Format__c')) {
                 template.Output_Format__c = (String) fields.get('Output_Format__c');
-                update template;
             }
+
+            update template;
             
             // 2. Create Version if requested
             if (createVersion == true) {
@@ -230,7 +238,7 @@ public with sharing class DocGenController {
             update template;
             
         } catch (Exception e) {
-            throw new DocGenException('Error activating version: ' + e.getMessage());
+            throw new AuraHandledException('Error activating version: ' + e.getMessage());
         }
     }
 
@@ -379,8 +387,6 @@ public with sharing class DocGenController {
         }
         return parents;
     }
-
-    // Sample data creation method removed per cleanup request.
 
     // --- Template Sharing Logic ---
 

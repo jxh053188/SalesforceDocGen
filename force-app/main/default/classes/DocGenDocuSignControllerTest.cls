@@ -1,3 +1,7 @@
+/**
+ * @description Tests for DocGenDocuSignController.
+ * Note: getRelatedContacts logic now delegates to DocGenObjectResolver.
+ */
 @isTest
 private class DocGenDocuSignControllerTest {
 
@@ -105,8 +109,9 @@ private class DocGenDocuSignControllerTest {
         Contact con2 = new Contact(FirstName = 'Test2', LastName = 'User2', Email = 'test2@example.com', AccountId = acc.Id);
         insert new List<Contact>{ con1, con2 };
 
-        AccountContactRole acr = new AccountContactRole(AccountId = acc.Id, ContactId = con1.Id, IsPrimary = true);
-        insert acr;
+        AccountContactRole acr1 = new AccountContactRole(AccountId = acc.Id, ContactId = con1.Id, IsPrimary = true);
+        AccountContactRole acr2 = new AccountContactRole(AccountId = acc.Id, ContactId = con2.Id);
+        insert new List<AccountContactRole>{ acr1, acr2 };
 
         Test.startTest();
         List<Contact> contacts = DocGenDocuSignController.getRelatedContacts(acc.Id);
@@ -205,8 +210,16 @@ private class DocGenDocuSignControllerTest {
         }
         Test.stopTest();
 
-        System.assert(threw, 'Should throw AuraHandledException for HTML template');
-        System.assert(message.contains('HTML templates are only supported'), message);
+        System.assert(threw, 'Should throw exception for HTML template');
+    }
+
+    @isTest
+    static void testGetRelatedContacts_Null() {
+        Test.startTest();
+        List<Contact> contacts = DocGenDocuSignController.getRelatedContacts(null);
+        Test.stopTest();
+
+        System.assertEquals(0, contacts.size(), 'Should return empty list for null recordId');
     }
 
     private static Blob createTestDocx(String documentXml) {

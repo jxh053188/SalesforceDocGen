@@ -62,7 +62,6 @@ global with sharing class DocGenFlowAction {
                 }
             } catch (Exception e) {
                 res.errorMessage = e.getMessage();
-                System.debug('DocGen Flow Error: ' + e.getStackTraceString());
             }
             responses.add(res);
         }

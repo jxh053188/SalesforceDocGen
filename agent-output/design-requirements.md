@@ -1,291 +1,227 @@
-# Design Requirements: Remove Loopback Callout & Bulk Generation
+# P0 Critical Security Fixes — Design Requirements
 
+**Branch:** `feature/security-p0-critical`
 **Date:** 2026-04-25
-**Branch:** (to be created after approval)
-**Option:** 7.1 from API Callout Analysis — Force all PDF generation client-side
-
----
-
-## WHAT USER REQUESTED
-
-1. Remove all Loopback Callout Infrastructure (dead code)
-2. Remove Bulk Generation completely
-3. Clean up ad-hoc scripts from project root
-4. Implement cleanup recommendations from API_CALLOUT_ANALYSIS.md
-5. Leave E-Signature Code untouched (except references to deleted components)
-6. Update remaining code to only support client-side generation paths (DOCX output, not PDF via server)
 
 ---
 
 ## EXISTING METADATA REVIEW
 
-- **Loopback chain**: `DocGenRenditionService` → `DocGenRenditionQueueable` → `DocGenRenditionTrigger` on `DocGen_Rendition_Event__e`. Uses Named Credential `DocGen_Loopback` → External Credential `DocGen_Loopback_Auth` → Auth Provider `DocGen_Auth_Provider`.
-- **Bulk chain**: `DocGenBulkController` (Aura/LWC) → `DocGenBatch` → `DocGen_Job__c`. Also exposed via `DocGenBulkFlowAction` invocable.
-- **References found in surviving code**:
-  - `DocGenService.cls` calls `DocGenRenditionService.addPendingRendition()` in `saveFile()`.
-  - `DocGenFlowAction.cls` calls `DocGenRenditionService.enqueueRenditions(true)`.
-  - `DocGenSignatureService.cls` calls both `addPendingRendition()` and `enqueueRenditions()` in `handleSignatureSubmission()`.
-  - `docGenWelcome.js` has `navigateToBulk()` pointing to `DocGen_Bulk_Gen` tab.
-  - `docGenSetupWizard.html/js` contains 3 setup steps for Connected App / Auth Provider / Named Credential loopback configuration.
-  - `DocGen.app-meta.xml` lists `DocGen_Bulk_Gen` and `DocGen_Job__c` tabs.
-  - Permission sets (`DocGen_Admin`, `DocGen_User`, `DocGen_Guest_Signature`) grant access to deleted classes/objects/external credentials.
-  - `manifest/package.xml` lists all deleted components.
-- **No other triggers** exist on `DocGen_Job__c` or `DocGen_Rendition_Event__e`.
-- **No layouts directory** exists for the custom objects.
-
----
-
-## DEPENDENCIES / CONSTRAINTS FOUND
-
-1. `DocGenSignatureService.cls` is e-signature code that **must** be modified because it directly references `DocGenRenditionService`, which is being deleted. This is a compilation dependency, not a feature change.
-2. `DocGenService.saveFile()` receives an `outputFormat` parameter that becomes dead code after removing rendition.
-3. `DocGenFlowAction` currently enqueues renditions after generating DOCX. After removal, Flow actions will return a DOCX ContentDocumentId even if template Output_Format__c is PDF. This is expected behavior per Option 7.1.
-4. `DocGenSignatureService.handleSignatureSubmission()` creates audit records with `Document_Hash_SHA256__c = 'PENDING_RENDITION:' + signedCvId`. Since rendition is gone, this must be replaced with an actual SHA-256 hash of the signed DOCX.
-5. `DocGenSetupWizard` references `getOrgUrl` Apex method solely for the loopback callback URL display. After removal, this wire/import is unnecessary.
+- **Object** `DocGen_Template__c` has fields: `Query_Config__c` (stores SOQL field list), `Query_Metadata__c`, `Base_Object_API__c`, etc.
+- **DocGenDataRetriever.cls** (line 20): `fieldsPart` is concatenated directly into a dynamic SOQL query: `SELECT ' + fieldsPart + ' FROM ' + baseObject + ' WHERE Id = :recordId LIMIT 1`. It already uses `Database.query(query, AccessLevel.USER_MODE)` for sharing/FLS enforcement, but the string concatenation is still vulnerable to field-list injection (e.g. block-comment truncation, unwanted function calls).
+- **DocGenPDFEngine.page** (line 93): `container.innerHTML = data.html;` injects raw HTML without sanitization. Also `postMessage` calls on lines 119 and 123 use target origin `*`.
+- **docGenPdfUtils.js** (line 69): `iframe.contentWindow.postMessage(payload, '*')` sends messages without target origin restriction.
+- **docGenRunner.js** (lines 251–254): `allowProtoPropertiesByDefault: true` and `allowProtoMethodsByDefault: true` in Handlebars compilation. Also `handleMessage` (line 432) listens to `message` events without origin validation.
+- **docGenAdmin.js** (lines 839–842): Same Handlebars prototype-access flags set to `true`.
+- **Static Resource** `DocGenEngine` is an `application/zip` containing `html2pdf.js`, `jszip.min.js`, `docx-preview.js`, `index.html`. No sanitization library is present.
+- **Test class** `DocGenTests.cls` has existing tests for `DocGenDataRetriever.getRecordData` (simple fields, invalid params, no results). No tests currently cover injection attempts or complex field validation.
+- Relevant constraints:
+  - `Database.query` with `AccessLevel.USER_MODE` enforces object- and field-level security but does **not** prevent malicious query structure injection through the `fieldsPart` string.
+  - The `fieldsPart` can contain parent-relationship paths (`Owner.Name`), child subqueries (`(SELECT Name FROM Contacts)`), and custom field names that must be preserved.
+  - Handlebars is used with custom helpers (`each`, `ifList`) to work around LWS proxy issues. Setting `allowProtoPropertiesByDefault`/`allowProtoMethodsByDefault` to `false` is safe because `flattenData` in the LWC already creates plain JavaScript objects without prototypes.
+  - The PDF engine iframe runs on the same Salesforce domain as the LWC. `window.location.origin` is the correct target/origin for all `postMessage` traffic.
 
 ---
 
 ## CLASSIFICATION
 
-**Admin Work (salesforce-admin)**
-- Delete custom objects, fields, tabs, static resources, triggers, auth metadata, LWC bundles
-- Update Custom Application tab list
-- Update Permission Sets (remove deleted refs)
-- Update manifest/package.xml
-
-**Developer Work (salesforce-developer)**
-- Modify surviving Apex classes to remove dead references
-- Modify surviving LWC components to remove dead references
-- Update e-signature audit hash logic
+- **salesforce-admin**: None (no new metadata objects, fields, or permission sets required).
+- **salesforce-developer**: All four fixes involve code changes (Apex, LWC JS, Visualforce JS). One new static-resource file (DOMPurify) must be added to the existing `DocGenEngine` zip.
 
 ---
 
-## ADMIN WORK (salesforce-admin)
+## WHAT USER REQUESTED
 
-### 1. Delete Apex Classes (16 files)
-Delete the following files entirely (`.cls` + `.cls-meta.xml` pairs):
-- `force-app/main/default/classes/DocGenRenditionService.cls`
-- `force-app/main/default/classes/DocGenRenditionService.cls-meta.xml`
-- `force-app/main/default/classes/DocGenRenditionQueueable.cls`
-- `force-app/main/default/classes/DocGenRenditionQueueable.cls-meta.xml`
-- `force-app/main/default/classes/DocGenBatch.cls`
-- `force-app/main/default/classes/DocGenBatch.cls-meta.xml`
-- `force-app/main/default/classes/DocGenBulkController.cls`
-- `force-app/main/default/classes/DocGenBulkController.cls-meta.xml`
-- `force-app/main/default/classes/DocGenBulkFlowAction.cls`
-- `force-app/main/default/classes/DocGenBulkFlowAction.cls-meta.xml`
-- `force-app/main/default/classes/DocGenBulkFlowActionTest.cls`
-- `force-app/main/default/classes/DocGenBulkFlowActionTest.cls-meta.xml`
-- `force-app/main/default/classes/DocGenBulkTests.cls`
-- `force-app/main/default/classes/DocGenBulkTests.cls-meta.xml`
-- `force-app/main/default/classes/LoopbackTestQueueable.cls`
-- `force-app/main/default/classes/LoopbackTestQueueable.cls-meta.xml`
+1. **Fix XSS via `innerHTML` in PDF Engine** — sanitize HTML before DOM insertion.
+2. **Fix `postMessage` without origin validation** — validate `event.origin` in listeners and restrict target origin in sends.
+3. **Disable Handlebars prototype access** — change `allowProtoPropertiesByDefault` and `allowProtoMethodsByDefault` from `true` to `false`.
+4. **Fix SOQL injection in `DocGenDataRetriever`** — server-side field whitelist/validation before constructing dynamic SOQL.
 
-### 2. Delete Apex Trigger (2 files)
-- `force-app/main/default/triggers/DocGenRenditionTrigger.trigger`
-- `force-app/main/default/triggers/DocGenRenditionTrigger.trigger-meta.xml`
+---
 
-### 3. Delete Custom Objects (entire directories)
-- `force-app/main/default/objects/DocGen_Job__c/` (object-meta + 6 field-meta files)
-- `force-app/main/default/objects/DocGen_Rendition_Event__e/` (object-meta + 2 field-meta files)
+## DEPENDENCIES / CONSTRAINTS FOUND
 
-### 4. Delete Custom Tabs (2 files)
-- `force-app/main/default/tabs/DocGen_Bulk_Gen.tab-meta.xml`
-- `force-app/main/default/tabs/DocGen_Job__c.tab-meta.xml`
-
-### 5. Delete Static Resources (2 files)
-- `force-app/main/default/staticresources/DocGen_Bulk_Screen.png`
-- `force-app/main/default/staticresources/DocGen_Bulk_Screen.resource-meta.xml`
-
-### 6. Delete LWC Bundle (4 files)
-- `force-app/main/default/lwc/docGenBulkRunner/docGenBulkRunner.html`
-- `force-app/main/default/lwc/docGenBulkRunner/docGenBulkRunner.js`
-- `force-app/main/default/lwc/docGenBulkRunner/docGenBulkRunner.js-meta.xml`
-- If a `__tests__` directory exists under `docGenBulkRunner/`, delete it as well.
-
-### 7. Delete Auth/Callout Metadata (3 files)
-- `force-app/main/default/namedCredentials/DocGen_Loopback.namedCredential-meta.xml`
-- `force-app/main/default/externalCredentials/DocGen_Loopback_Auth.externalCredential-meta.xml`
-- `force-app/main/default/authproviders/DocGen_Auth_Provider.authprovider-meta.xml`
-
-### 8. Update Custom Application
-File: `force-app/main/default/applications/DocGen.app-meta.xml`
-- Remove `<tabs>DocGen_Bulk_Gen</tabs>`
-- Remove `<tabs>DocGen_Job__c</tabs>`
-
-### 9. Update Permission Sets
-
-**File: `force-app/main/default/permissionsets/DocGen_Admin.permissionset-meta.xml`**
-Remove the following nodes entirely:
-- `<classAccesses>` for: `DocGenBatch`, `DocGenBulkController`, `DocGenBulkFlowAction`, `DocGenRenditionQueueable`, `DocGenRenditionService`
-- `<externalCredentialPrincipalAccesses>` block for `DocGen_Loopback_Auth-Admin`
-- `<fieldPermissions>` for all `DocGen_Job__c` fields (5 fields: `Error_Count__c`, `Query_Condition__c`, `Status__c`, `Success_Count__c`, `Total_Records__c`)
-- `<objectPermissions>` for `DocGen_Job__c`
-- `<tabSettings>` for `DocGen_Bulk_Gen` and `DocGen_Job__c`
-
-**File: `force-app/main/default/permissionsets/DocGen_User.permissionset-meta.xml`**
-Remove the same nodes as Admin (where they exist):
-- `<classAccesses>` for: `DocGenBatch`, `DocGenBulkController`, `DocGenBulkFlowAction`, `DocGenRenditionQueueable`, `DocGenRenditionService`
-- `<externalCredentialPrincipalAccesses>` block for `DocGen_Loopback_Auth-Admin`
-- `<fieldPermissions>` for all `DocGen_Job__c` fields
-- `<objectPermissions>` for `DocGen_Job__c`
-- `<tabSettings>` for `DocGen_Bulk_Gen` and `DocGen_Job__c`
-
-**File: `force-app/main/default/permissionsets/DocGen_Guest_Signature.permissionset-meta.xml`**
-- Remove `<objectPermissions>` for `DocGen_Rendition_Event__e`
-- (Optional) Update `<description>` to remove "trigger renditions" text, but this is not critical.
-
-### 10. Update Manifest
-File: `manifest/package.xml`
-Remove `<members>` entries for all deleted components:
-- ApexClass members: `DocGenBatch`, `DocGenBulkController`, `DocGenBulkFlowAction`, `DocGenBulkFlowActionTest`, `DocGenBulkTests`, `DocGenRenditionQueueable`, `DocGenRenditionService`, `LoopbackTestQueueable`
-- ApexTrigger member: `DocGenRenditionTrigger`
-- AuthProvider member: `DocGen_Auth_Provider`
-- ExternalCredential member: `DocGen_Loopback_Auth`
-- CustomObject members: `DocGen_Job__c`, `DocGen_Rendition_Event__e`
-- CustomTab members: `DocGen_Bulk_Gen`, `DocGen_Job__c`
-- LightningComponentBundle member: `docGenBulkRunner`
-- NamedCredential member: `DocGen_Loopback`
-- StaticResource member: `DocGen_Bulk_Screen`
-
-### 11. Delete Ad-Hoc Scripts from Project Root
-Delete these files (they are not part of the SFDX package):
-- `/Users/jarredharkness/SalesforceDocGen/test_soql2.apex`
-- `/Users/jarredharkness/SalesforceDocGen/update_permissions.py`
-- `/Users/jarredharkness/SalesforceDocGen/fix_perms_final.js`
-- `/Users/jarredharkness/SalesforceDocGen/test_fix.apex`
-- `/Users/jarredharkness/SalesforceDocGen/create_metadata.py`
-- `/Users/jarredharkness/SalesforceDocGen/fix_perms.js`
-- `/Users/jarredharkness/SalesforceDocGen/test_soql.apex`
-- `/Users/jarredharkness/SalesforceDocGen/test_callout.apex`
-- `/Users/jarredharkness/SalesforceDocGen/scripts/test_971_loopback.apex`
-
-**Keep:** `/Users/jarredharkness/SalesforceDocGen/sample-html-template.html`
+1. DOMPurify must be added to the `DocGenEngine` static-resource folder so the Visualforce page can load it.
+2. The SOQL field-validation logic must support:
+   - Simple fields (`Name`, `Custom_Field__c`)
+   - Parent-relationship paths (`Owner.Name`, `CreatedBy.Profile.Name`)
+   - Child subqueries (`(SELECT Name FROM Contacts)`)
+3. `AccessLevel.USER_MODE` already enforces FLS/OLS; validation is an additional structural-hardening layer.
+4. All `postMessage` endpoints (send and receive) must use `window.location.origin`.
+5. Handlebars proto-access changes must not break the existing `each`/`ifList` LWS workarounds (they operate on flattened plain objects, so `false` is safe).
 
 ---
 
 ## DEV WORK (salesforce-developer)
 
-### 1. Modify `DocGenService.cls`
-**File:** `force-app/main/default/classes/DocGenService.cls`
+### 1. Add DOMPurify to DocGenEngine static resource
+- **File to add**: `force-app/main/default/staticresources/DocGenEngine/purify.min.js`
+- **Source**: DOMPurify latest stable minified build (e.g. v3.2.5). Use the standard distribution from `https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.2.5/purify.min.js` or the GitHub release asset.
+- **Scope**: No new static-resource metadata XML is needed; the existing `DocGenEngine.resource-meta.xml` (`contentType: application/zip`) will zip the folder contents on deploy.
 
-In the `saveFile` method (currently lines ~278-305):
-- Remove the `format` parameter from the `saveFile` method signature. The method should read:
-  `private static Id saveFile(Blob fileBlob, String title, Id recordId, String type)`
-- Remove the entire `if (format == 'PDF')` block that calls `DocGenRenditionService.addPendingRendition(cv.Id, recordId);`
-- Update the call site inside `generateDocument` (line ~65) from:
-  `return saveFile(resultBlob, docTitle, recordId, outputFormat, templateType);`
-  to:
-  `return saveFile(resultBlob, docTitle, recordId, templateType);`
+### 2. Sanitize HTML in DocGenPDFEngine.page
+- **File**: `force-app/main/default/pages/DocGenPDFEngine.page`
+- **Changes**:
+  - Add `<script src="{!URLFOR($Resource.DocGenEngine, 'purify.min.js')}"></script>` inside `<head>`, after the existing library scripts.
+  - In the inline `<script>` block, before `container.innerHTML = data.html;` (line 93), sanitize the HTML:
+    ```javascript
+    const cleanHtml = DOMPurify.sanitize(data.html);
+    container.innerHTML = cleanHtml;
+    ```
+  - In the `window.addEventListener('message', ...)` handler (line 59), add at the very top:
+    ```javascript
+    if (event.origin !== window.location.origin) return;
+    ```
+  - In `sendError` (line 119), change:
+    ```javascript
+    window.parent.postMessage({ type: 'docgen_error', message: msg }, '*');
+    ```
+    to:
+    ```javascript
+    window.parent.postMessage({ type: 'docgen_error', message: msg }, window.location.origin);
+    ```
+  - In `sendSuccess` (line 123), change:
+    ```javascript
+    window.parent.postMessage({ type: 'docgen_success', blob: blob, fileName: fileName }, '*');
+    ```
+    to:
+    ```javascript
+    window.parent.postMessage({ type: 'docgen_success', blob: blob, fileName: fileName }, window.location.origin);
+    ```
 
-**Result:** Server-side generation always produces DOCX/PPTX/HTML. PDF templates will still generate DOCX on the server; PDF conversion happens only in the LWC client path (docGenRunner / docGenAdmin).
+### 3. Fix postMessage origin validation in docGenPdfUtils.js
+- **File**: `force-app/main/default/lwc/docGenPdfUtils/docGenPdfUtils.js`
+- **Changes**:
+  - In the `messageHandler` (around line 25), add as the first statement inside the handler:
+    ```javascript
+    if (event.origin !== window.location.origin) return;
+    ```
+  - On line 69, change:
+    ```javascript
+    iframe.contentWindow.postMessage(payload, '*');
+    ```
+    to:
+    ```javascript
+    iframe.contentWindow.postMessage(payload, window.location.origin);
+    ```
 
-### 2. Modify `DocGenFlowAction.cls`
-**File:** `force-app/main/default/classes/DocGenFlowAction.cls`
+### 4. Fix postMessage origin validation in docGenRunner.js
+- **File**: `force-app/main/default/lwc/docGenRunner/docGenRunner.js`
+- **Changes**:
+  - In `handleMessage` (around line 432), add as the first statement:
+    ```javascript
+    if (event.origin !== window.location.origin) return;
+    ```
 
-In `generateDocument` method (currently lines 36-38):
-- Remove these lines entirely:
-  ```apex
-  // EXPERIMENT: Flush collected PDF rendition jobs
-  // Direct enqueuing is used to preserve the user's auth context for loopback callouts
-  DocGenRenditionService.enqueueRenditions(true);
-  ```
+### 5. Disable Handlebars prototype access in docGenRunner.js
+- **File**: `force-app/main/default/lwc/docGenRunner/docGenRunner.js`
+- **Changes**:
+  - Lines 251–254 currently read:
+    ```javascript
+    const renderedHtml = template(recordData, {
+        allowProtoPropertiesByDefault: true,
+        allowProtoMethodsByDefault: true
+    });
+    ```
+    Change both booleans to `false`:
+    ```javascript
+    const renderedHtml = template(recordData, {
+        allowProtoPropertiesByDefault: false,
+        allowProtoMethodsByDefault: false
+    });
+    ```
 
-**Result:** Flow action returns a DOCX ContentDocumentId. No async rendition is triggered.
+### 6. Disable Handlebars prototype access in docGenAdmin.js
+- **File**: `force-app/main/default/lwc/docGenAdmin/docGenAdmin.js`
+- **Changes**:
+  - Lines 839–842 currently read:
+    ```javascript
+    const renderedHtml = template(recordData, {
+        allowProtoPropertiesByDefault: true,
+        allowProtoMethodsByDefault: true
+    });
+    ```
+    Change both booleans to `false`.
 
-### 3. Modify `DocGenSignatureService.cls`
-**File:** `force-app/main/default/classes/DocGenSignatureService.cls`
+### 7. SOQL injection hardening in DocGenDataRetriever.cls
+- **File**: `force-app/main/default/classes/DocGenDataRetriever.cls`
+- **Changes**:
+  - Create a new private static helper method `validateFieldsConfig(String fieldsConfig, String baseObject)` that returns a sanitized, reconstructed field list string.
+  - **Logic requirements**:
+    1. Trim input. If it starts with `SELECT ` (case-insensitive), strip it.
+    2. Remove any block comments (`/* ... */`). If an unclosed comment is detected, throw `AuraHandledException`.
+    3. Tokenize by commas **only at the top level** (commas inside parentheses belong to subqueries and must not split tokens).
+    4. For each token:
+       - **Subquery** (token starts with `(` and ends with `)`):
+         - Validate format: `(SELECT <fields> FROM <relationshipName>)` using a strict regex or parser.
+         - Extract `<relationshipName>`. Verify it exists in the base object's `getChildRelationships()`.
+         - Determine the child object API name from the relationship.
+         - Recursively validate the inner `<fields>` against the child object's schema.
+         - Reconstruct the subquery with validated inner fields.
+       - **Parent path** (token contains `.`):
+         - Split by `.`. Validate the first segment against the base object's fields. The field must be a reference field (`getReferenceTo()` not empty) or have a valid relationship name.
+         - Walk the relationship chain: for each subsequent segment, validate against the parent object's fields.
+         - Reconstruct the dot-separated path.
+       - **Simple field**:
+         - Validate that the token exactly matches an accessible field name on the base object (case-sensitive check against `Schema.DescribeSObjectResult.fields.getMap()` keys after trimming).
+         - Include it if valid.
+    5. If any token fails validation, throw `AuraHandledException('Invalid field or subquery in query configuration: ' + token)`.
+    6. Return the reconstructed comma-separated field list.
+  - In `getRecordData`, replace the direct concatenation on line 20 with:
+    ```apex
+    String validatedFields = validateFieldsConfig(fieldsConfig, baseObject);
+    String query = 'SELECT ' + validatedFields + ' FROM ' + baseObject + ' WHERE Id = :recordId LIMIT 1';
+    ```
+  - **Governor limits**: Use `Schema.getGlobalDescribe()` once per invocation. Cache the base object's `DescribeSObjectResult` in a local variable. Relationship walking may consume extra describe calls — keep them minimal and avoid queries inside loops.
 
-In `handleSignatureSubmission` method (currently lines 145-147):
-- Remove these lines entirely:
-  ```apex
-  // 4. Trigger PDF Rendition (requires external credential access)
-  DocGenRenditionService.addPendingRendition(signedCvId, req.Related_Record_Id__c);
-  DocGenRenditionService.enqueueRenditions();
-  ```
-
-Also in the same method (currently line 136):
-- Replace:
-  `audit.Document_Hash_SHA256__c = 'PENDING_RENDITION:' + signedCvId;`
-- With a real hash computation. After `Id signedCvId = stampSignature(...)`, query back the inserted ContentVersion and compute the hash:
-  ```apex
-  ContentVersion signedCv = [SELECT VersionData FROM ContentVersion WHERE Id = :signedCvId WITH SYSTEM_MODE LIMIT 1];
-  String docHash = EncodingUtil.convertToHex(Crypto.generateDigest('SHA-256', signedCv.VersionData));
-  audit.Document_Hash_SHA256__c = docHash;
-  ```
-  (Move this query to after the `stampSignature` call and before `insert audit;`, or adjust ordering so `audit.Document_Hash_SHA256__c` is populated before `insert audit;`.)
-
-**Result:** E-signature async path no longer depends on deleted rendition service. Audit records contain the actual SHA-256 of the signed DOCX.
-
-### 4. Modify `docGenWelcome.js`
-**File:** `force-app/main/default/lwc/docGenWelcome/docGenWelcome.js`
-
-- Remove the `navigateToBulk()` method entirely.
-- If the HTML template has a button calling `navigateToBulk`, remove that button as well. (Check `docGenWelcome.html` for a bulk navigation button and remove it.)
-
-### 5. Modify `docGenSetupWizard.js`
-**File:** `force-app/main/default/lwc/docGenSetupWizard/docGenSetupWizard.js`
-
-- Remove the `get callbackUrl()` getter.
-- Remove the `@wire(getOrgUrl)` block and its import.
-- Remove the `getOrgUrl` import line: `import getOrgUrl from '@salesforce/apex/DocGenSetupController.getOrgUrl';`
-- Remove `this.orgUrl` tracking if it is only used for `callbackUrl`.
-- Keep `getSettings`, `saveSettings`, and the `experienceSiteUrl` logic.
-
-### 6. Modify `docGenSetupWizard.html`
-**File:** `force-app/main/default/lwc/docGenSetupWizard/docGenSetupWizard.html`
-
-- Remove the `<lightning-progress-indicator>` and all step navigation (Step 1, 2, 3, 4 templates).
-- Replace with a single-step card that only shows the Experience Site URL input and Save button.
-- Remove the introduction banner text that mentions "API Loopback" and "OAuth integration".
-- Keep the `lightning-input` for Experience Site URL, the example text, and the Save button.
-- Remove `handleStepClick`, `nextStep`, `prevStep`, and all step-related getters (`isStep1`, `isStep2`, `isStep3`, `isStep4`) from the JS if they remain. (The JS modifications above should handle this.)
+### 8. Apex test coverage for SOQL injection fix
+- **File**: `force-app/main/default/classes/DocGenTests.cls`
+- **Add test methods**:
+  - `testGetRecordDataValidatesSimpleFields` — ensure `Name, AccountSource` still works.
+  - `testGetRecordDataValidatesParentField` — ensure `Owner.Name` still works.
+  - `testGetRecordDataValidatesSubquery` — ensure `(SELECT Name FROM Contacts)` still works.
+  - `testGetRecordDataRejectsInvalidField` — pass `Name, BadField__c` and assert exception thrown.
+  - `testGetRecordDataRejectsInjectionComment` — pass `Id /*` and assert exception thrown.
+  - `testGetRecordDataRejectsInjectionFromKeyword` — pass `Id FROM Account` and assert exception thrown.
+  - `testGetRecordDataRejectsInjectionWhereKeyword` — pass `Id WHERE Name='x'` and assert exception thrown.
 
 ---
 
 ## EXECUTION ORDER
 
-1. **Admin Agent** commits all file deletions and metadata updates (permission sets, app, manifest, tabs, objects, auth metadata, static resources, LWC bundle).
-2. **Developer Agent** commits Apex/LWC modifications.
-3. **No dependency** between admin and developer commits for source control — SFDX will validate on deploy. However, conceptually admin work should be committed first so the branch reflects a coherent state.
+1. Add `purify.min.js` to `staticresources/DocGenEngine/`.
+2. Update `DocGenPDFEngine.page` (load DOMPurify, sanitize HTML, fix postMessage origins).
+3. Update `docGenPdfUtils.js` (fix postMessage target origin, add listener origin check).
+4. Update `docGenRunner.js` (fix postMessage listener origin check, disable Handlebars proto access).
+5. Update `docGenAdmin.js` (disable Handlebars proto access).
+6. Update `DocGenDataRetriever.cls` (add `validateFieldsConfig` and use it).
+7. Update `DocGenTests.cls` (add injection/validation test cases).
 
 ---
 
 ## IMPLEMENTATION NOTES FOR ALL AGENTS
 
-- **Do NOT deploy** to any org. Only commit to the feature branch.
-- `DocGenSignatureService` is e-signature code. Do not delete it. Only remove the rendition references and fix the audit hash as specified.
-- `DocGenSetupController.cls` does **not** need to be modified. The `getOrgUrl` method is harmless; only the wizard's consumption of it is removed.
-- `DocGenController.cls` does **not** need modification (it has no direct references to deleted components).
-- `DocGenDataRetriever.cls`, `DocGenTemplateManager.cls`, `DocGenException.cls`, `DocGenSharingTests.cls`, `DocGenTests.cls` do **not** need modification.
-- After removal, `DocGenService.generateDocument()` will return a DOCX ContentDocumentId regardless of template `Output_Format__c`. The client-side LWC (`docGenRunner`, `docGenAdmin`) is responsible for PDF conversion when the user selects PDF output from the UI.
-- The `DocGen_Job__c` object has a lookup field `Template__c`. Deleting the object does not affect `DocGen_Template__c`.
-- `DocGen_Saved_Query__c` object is **kept** (it is used by the template manager for storing query configurations, not bulk).
-- Ensure `git rm` is used for deleted files so they are properly tracked as removals.
-
----
-
-## PROMPT FOR salesforce-admin
-
-"Commit to branch `feature/2026-04-25-remove-loopback-bulk`. Do not deploy.
-
-1. Delete all files listed in the Admin Work section of `agent-output/design-requirements.md`.
-2. Update `DocGen.app-meta.xml` to remove `DocGen_Bulk_Gen` and `DocGen_Job__c` tabs.
-3. Update all three permission sets (`DocGen_Admin`, `DocGen_User`, `DocGen_Guest_Signature`) to remove references to deleted classes, objects, fields, tabs, and external credentials.
-4. Update `manifest/package.xml` to remove all deleted component entries.
-5. Delete the ad-hoc script files from the project root (listed in section 11).
-6. Use `git rm` for deletions and commit all changes."
+- **Do not** attempt to write to formula fields — none are involved.
+- **Do not** change `DocGenEngine.resource-meta.xml`; simply add the new JS file to the folder.
+- When validating fields in Apex, remember that `Schema.SObjectType.fields.getMap()` keys are case-sensitive API names. Validate tokens after trimming whitespace.
+- `Database.query(query, AccessLevel.USER_MODE)` must remain in place; the validation layer is additive.
+- All JavaScript origin checks must use exact string equality: `event.origin === window.location.origin`. Do **not** use `endsWith` or other relaxed checks.
+- DOMPurify sanitization should be applied only to the HTML path in the PDF engine (line 93). The DOCX path (line 102) uses `docx.renderAsync` which generates its own DOM — no raw `innerHTML` there.
+- Handlebars `allowProtoPropertiesByDefault: false` is safe because `flattenData` recursively builds plain `{}` objects and `Array.from` arrays before passing them to the template.
+- Commit all changes to branch `feature/security-p0-critical`. Do **not** deploy.
 
 ---
 
 ## PROMPT FOR salesforce-developer
 
-"Commit to branch `feature/2026-04-25-remove-loopback-bulk`. Do not deploy.
+"You are fixing four P0 security issues on branch `feature/security-p0-critical`. Commit all changes to this branch; do not deploy.
 
-1. Modify `DocGenService.cls`: remove the `format` parameter from `saveFile()`, remove the `DocGenRenditionService.addPendingRendition()` call, and update the call site in `generateDocument()`.
-2. Modify `DocGenFlowAction.cls`: remove the `DocGenRenditionService.enqueueRenditions(true)` call at the end of `generateDocument()`.
-3. Modify `DocGenSignatureService.cls`: remove the rendition calls from `handleSignatureSubmission()`, and replace the `'PENDING_RENDITION:' + signedCvId` audit hash with a real SHA-256 hash of the signed ContentVersion's VersionData.
-4. Modify `docGenWelcome.js` (and `.html` if needed): remove the `navigateToBulk()` method and any corresponding UI button.
-5. Modify `docGenSetupWizard.js`: remove `getOrgUrl` wire/import and `callbackUrl` getter.
-6. Modify `docGenSetupWizard.html`: replace the multi-step loopback setup wizard with a single-step card containing only the Experience Site URL input and Save button. Remove OAuth/loopback text.
-7. Commit all changes."
+1. **XSS in PDF Engine**: Download DOMPurify v3.2.5 minified build and add it as `force-app/main/default/staticresources/DocGenEngine/purify.min.js`. In `force-app/main/default/pages/DocGenPDFEngine.page`, load the script via `{!URLFOR($Resource.DocGenEngine, 'purify.min.js')}`, then replace `container.innerHTML = data.html;` with `container.innerHTML = DOMPurify.sanitize(data.html);`.
+
+2. **postMessage origin validation**: In `DocGenPDFEngine.page`, add `if (event.origin !== window.location.origin) return;` at the top of the message listener. Change both `window.parent.postMessage(..., '*')` calls to use `window.location.origin` as the target. In `docGenPdfUtils.js`, add the same origin check in the `messageHandler` and change `iframe.contentWindow.postMessage(payload, '*')` to use `window.location.origin`. In `docGenRunner.js`, add the same origin check at the start of `handleMessage`.
+
+3. **Handlebars prototype access**: In `docGenRunner.js` and `docGenAdmin.js`, find the `template(recordData, { allowProtoPropertiesByDefault: true, allowProtoMethodsByDefault: true })` calls and change both booleans to `false`.
+
+4. **SOQL injection in DocGenDataRetriever**: In `DocGenDataRetriever.cls`, create a private static `validateFieldsConfig(String fieldsConfig, String baseObject)` method that parses the field list, strips comments, tokenizes by top-level commas, and validates each token against the Salesforce schema (simple fields, parent paths, and child subqueries). Reconstruct a validated field string. Replace line 20's direct concatenation with the validated string. Throw `AuraHandledException` for any invalid token or unclosed comment.
+
+5. **Tests**: Add test methods to `DocGenTests.cls` covering: (a) valid simple fields, (b) valid parent path, (c) valid subquery, (d) invalid field rejection, (e) comment injection rejection, (f) `FROM` keyword injection rejection, (g) `WHERE` keyword injection rejection."

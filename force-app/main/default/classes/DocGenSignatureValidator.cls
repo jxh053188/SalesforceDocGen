@@ -1,4 +1,4 @@
-public without sharing class DocGenSignatureValidator {
+public with sharing class DocGenSignatureValidator {
 
     public class FlowInput {
         @InvocableVariable(label='Secure Token' required=true)

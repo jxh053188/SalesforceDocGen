@@ -12,7 +12,7 @@ export default class DocGenPreviewModal extends LightningModal {
             try {
                 this.pdfUrl = URL.createObjectURL(this.pdfBlob);
             } catch (e) {
-                console.error('Error creating object URL for PDF Blob:', e);
+                this.dispatchEvent(new CustomEvent('error', { detail: { message: 'Unable to prepare PDF preview.', error: e } }));
             }
         }
     }

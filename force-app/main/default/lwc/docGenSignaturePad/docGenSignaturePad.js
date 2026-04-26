@@ -21,8 +21,6 @@ export default class DocGenSignaturePad extends LightningElement {
     @track isProcessing = false;
     isDrawing = false;
     isCanvasEmpty = true;
-    isDrawing = false;
-    isCanvasEmpty = true;
     
     // Canvas Context
     ctx;
@@ -36,6 +34,24 @@ export default class DocGenSignaturePad extends LightningElement {
 
     connectedCallback() {
         this.initData();
+        this._resizeHandler = this.debounce(() => {
+            this.initCanvas();
+        }, 150);
+        window.addEventListener('resize', this._resizeHandler);
+    }
+
+    disconnectedCallback() {
+        if (this._resizeHandler) {
+            window.removeEventListener('resize', this._resizeHandler);
+        }
+    }
+
+    debounce(fn, ms) {
+        let timeout;
+        return () => {
+            clearTimeout(timeout);
+            timeout = setTimeout(fn, ms);
+        };
     }
 
     async initData() {
@@ -49,7 +65,7 @@ export default class DocGenSignaturePad extends LightningElement {
                     this.mergeDataJson = res.mergeDataJson;
                 }
             } catch (error) {
-                console.error('DocGen: Error initializing data:', error);
+                // Error intentionally swallowed; caller has no retry path.
             }
         }
     }
@@ -67,7 +83,9 @@ export default class DocGenSignaturePad extends LightningElement {
         if (canvas) {
             const wrapper = this.template.querySelector('.canvas-wrapper');
             canvas.width = wrapper.offsetWidth;
-            canvas.height = 300; 
+            // Maintain a 3:1 aspect ratio, with a minimum usable height
+            // Note: resizing clears the canvas bitmap because width/height attrs are reset
+            canvas.height = Math.max(150, Math.round(wrapper.offsetWidth / 3));
 
             this.ctx = canvas.getContext('2d');
             this.ctx.strokeStyle = '#000000';
@@ -135,7 +153,6 @@ export default class DocGenSignaturePad extends LightningElement {
         const activeToken = this.token || this.secureToken;
 
         try {
-            console.log('DocGen: Capturing signature for backend Flow finalization');
             // 1. Get Signature Image
             const canvas = this.template.querySelector('.signature-pad');
             const dataUrl = canvas.toDataURL('image/png');
@@ -146,13 +163,11 @@ export default class DocGenSignaturePad extends LightningElement {
 
             // 2. AUTO-ADVANCE FLOW
             if (this.availableActions && this.availableActions.find(action => action === 'NEXT')) {
-                console.log('DocGen: Navigating to NEXT screen...');
                 const navigateNextEvent = new FlowNavigationNextEvent();
                 this.dispatchEvent(navigateNextEvent);
             }
 
         } catch (error) {
-            console.error('DocGen: Error capturing signature:', error);
             const errorMsg = error.body ? error.body.message : (error.message || JSON.stringify(error));
             alert('Error capturing signature: ' + errorMsg);
         } finally {

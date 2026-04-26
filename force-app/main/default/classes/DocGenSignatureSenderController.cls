@@ -1,5 +1,12 @@
 public with sharing class DocGenSignatureSenderController {
-    
+
+    /**
+     * Exception Convention:
+     * - Validation / business logic errors -> throw new DocGenException(...)
+     * - Errors surfaced to LWC/Aura components -> throw new AuraHandledException(...)
+     * - Unexpected system errors -> wrap in AuraHandledException with a generic message
+     */
+
     @AuraEnabled(cacheable=true)
     public static List<ContentVersion> getRelatedDocuments(Id recordId) {
         List<ContentDocumentLink> links = [SELECT ContentDocumentId FROM ContentDocumentLink WHERE LinkedEntityId = :recordId WITH USER_MODE];
@@ -25,7 +32,8 @@ public with sharing class DocGenSignatureSenderController {
         }
         Id contentVersionId = docs[0].LatestPublishedVersionId;
         // Generate cryptographic secure token
-        Blob hash = Crypto.generateDigest('SHA-256', Blob.valueOf(String.valueOf(System.now().getTime()) + Math.random() + signerEmail));
+        Blob aesKey = Crypto.generateAesKey(256);
+        Blob hash = Crypto.generateDigest('SHA-256', aesKey);
         String token = EncodingUtil.convertToHex(hash);
         
         DocGen_Signature_Request__c req = new DocGen_Signature_Request__c();

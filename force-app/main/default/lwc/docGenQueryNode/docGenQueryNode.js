@@ -192,7 +192,6 @@ export default class DocGenQueryNode extends LightningElement {
             this.isLoadingFields = false;
         } else if (error) {
             const msg = error.body ? error.body.message : JSON.stringify(error);
-            console.error('docGenQueryNode: Failed to load fields for', this.localConfig.objectApiName, msg);
             this.dispatchEvent(new ShowToastEvent({ title: 'Error Loading Fields', message: `Could not load fields for "${this.localConfig.objectApiName}": ${msg}`, variant: 'error' }));
             this._fieldOptions = [];
             this.filteredFieldOptions = [];
@@ -226,7 +225,6 @@ export default class DocGenQueryNode extends LightningElement {
             this.isLoadingChildren = false;
         } else if (error) {
             const msg = error.body ? error.body.message : JSON.stringify(error);
-            console.error('docGenQueryNode: Failed to load child relationships for', this.localConfig.objectApiName, msg);
             this.dispatchEvent(new ShowToastEvent({ title: 'Error Loading Related Lists', message: `Could not load related lists for "${this.localConfig.objectApiName}": ${msg}`, variant: 'error' }));
             this.childOptions = [];
             this.filteredChildOptions = [];
@@ -260,7 +258,6 @@ export default class DocGenQueryNode extends LightningElement {
             this.isLoadingParents = false;
         } else if (error) {
             const msg = error.body ? error.body.message : JSON.stringify(error);
-            console.error('docGenQueryNode: Failed to load parent lookups for', this.localConfig.objectApiName, msg);
             this.dispatchEvent(new ShowToastEvent({ title: 'Error Loading Lookups', message: `Could not load lookups for "${this.localConfig.objectApiName}": ${msg}`, variant: 'error' }));
             this.parentOptions = [];
             this.filteredParentOptions = [];

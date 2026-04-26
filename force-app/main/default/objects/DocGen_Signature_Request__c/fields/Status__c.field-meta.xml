@@ -35,6 +35,11 @@
                 <default>false</default>
                 <label>Cancelled</label>
             </value>
+            <value>
+                <fullName>Error</fullName>
+                <default>false</default>
+                <label>Error</label>
+            </value>
         </valueSetDefinition>
     </valueSet>
 </CustomField>

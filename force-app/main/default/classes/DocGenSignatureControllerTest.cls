@@ -102,6 +102,33 @@ private class DocGenSignatureControllerTest {
     }
 
     @isTest
+    static void testValidateToken_ConcurrentDuplicatePrevention() {
+        ContentVersion cv = [SELECT Id FROM ContentVersion WHERE Title = 'SignSource' LIMIT 1];
+        DocGen_Signature_Request__c req = new DocGen_Signature_Request__c(
+            Signer_Name__c = 'John Doe',
+            Source_Document_Id__c = cv.Id,
+            Secure_Token__c = 'tok-concurrent',
+            Status__c = 'Sent'
+        );
+        insert req;
+
+        Test.startTest();
+        DocGenSignatureController.SignatureInitResponse res1 = DocGenSignatureController.validateToken('tok-concurrent');
+        DocGenSignatureController.SignatureInitResponse res2 = DocGenSignatureController.validateToken('tok-concurrent');
+        Test.stopTest();
+
+        System.assertEquals(true, res1.isValid, 'First call should be valid');
+        System.assertEquals(true, res2.isValid, 'Second call should be valid');
+        System.assertNotEquals(null, res1.documentUrl, 'First call should have document URL');
+        System.assertNotEquals(null, res2.documentUrl, 'Second call should have document URL');
+
+        List<ContentDistribution> dists = [
+            SELECT Id FROM ContentDistribution WHERE ContentVersionId = :cv.Id
+        ];
+        System.assertEquals(1, dists.size(), 'Exactly one ContentDistribution should exist for the ContentVersion');
+    }
+
+    @isTest
     static void testFetchDocumentData() {
         ContentVersion cv = [SELECT Id FROM ContentVersion WHERE Title = 'SignSource' LIMIT 1];
         DocGen_Signature_Request__c req = new DocGen_Signature_Request__c(
@@ -176,6 +203,10 @@ private class DocGenSignatureControllerTest {
 
         DocGen_Signature_Audit__c updatedAudit = [SELECT Document_Hash_SHA256__c FROM DocGen_Signature_Audit__c WHERE Id = :audit.Id];
         System.assertNotEquals('PENDING_CLIENT_PDF', updatedAudit.Document_Hash_SHA256__c, 'Hash should be updated');
+
+        List<ContentDocumentLink> links = [SELECT Id, Visibility FROM ContentDocumentLink WHERE LinkedEntityId = :acc.Id];
+        System.assertEquals(1, links.size(), 'Document should be linked to account');
+        System.assertEquals('InternalUsers', links[0].Visibility, 'Visibility should be restricted to InternalUsers');
     }
 
     @isTest
@@ -246,6 +277,36 @@ private class DocGenSignatureControllerTest {
         List<DocGen_Signature_Request__c> reqs = [SELECT Id, Status__c, Signer_Name__c FROM DocGen_Signature_Request__c];
         System.assertEquals(1, reqs.size(), 'Request should be created');
         System.assertEquals('Sent', reqs[0].Status__c, 'Status should be Sent');
+    }
+
+    @isTest
+    static void testTokenCryptographicStrength() {
+        ContentVersion cv = [SELECT Id, ContentDocumentId FROM ContentVersion WHERE Title = 'SignSource' LIMIT 1];
+        Account acc = new Account(Name = 'Test Acc');
+        insert acc;
+
+        DocGen_Settings__c settings = DocGen_Settings__c.getOrgDefaults();
+        settings.Experience_Site_Url__c = 'https://test.example.com';
+        if (settings.Id == null) {
+            insert settings;
+        } else {
+            update settings;
+        }
+
+        Set<String> tokens = new Set<String>();
+        // Use a statistically meaningful sample size (10) to verify token uniqueness
+        // without excessive DML overhead inside a single test method.
+        Test.startTest();
+        for (Integer i = 0; i < 10; i++) {
+            String url = DocGenSignatureSenderController.createSignatureRequest(cv.ContentDocumentId, acc.Id, 'John Doe', 'john@example.com');
+            String token = url.substringAfter('token=');
+            System.assertEquals(64, token.length(), 'Token should be 64 hex characters');
+            System.assert(!tokens.contains(token), 'Token should be unique');
+            tokens.add(token);
+        }
+        Test.stopTest();
+
+        System.assertEquals(10, tokens.size(), 'All 10 tokens should be unique');
     }
 
     @isTest
@@ -331,5 +392,134 @@ private class DocGenSignatureControllerTest {
 
         System.assertEquals(false, res.isValid, 'Should be invalid');
         System.assert(res.message.contains('Not Found'), 'Message should mention not found');
+    }
+
+    @isTest
+    static void testValidateTokenMissingContentVersion() {
+        DocGen_Signature_Request__c req = new DocGen_Signature_Request__c(
+            Signer_Name__c = 'John Doe',
+            Source_Document_Id__c = Schema.SObjectType.ContentVersion.getKeyPrefix() + '000000000000',
+            Secure_Token__c = 'tok-missing-cv',
+            Status__c = 'Sent'
+        );
+        insert req;
+
+        Test.startTest();
+        DocGenSignatureController.SignatureInitResponse res = DocGenSignatureController.validateToken('tok-missing-cv');
+        Test.stopTest();
+
+        System.assertEquals(true, res.isValid, 'Should be valid even when ContentVersion is missing');
+        System.assertEquals('Confidential Document', res.documentTitle, 'Should default title when ContentVersion missing');
+    }
+
+    @isTest
+    static void testFetchDocumentDataInvalidToken() {
+        Test.startTest();
+        DocGenSignatureController.SignatureInitResponse res = DocGenSignatureController.fetchDocumentData('nonexistent-token');
+        Test.stopTest();
+
+        System.assertEquals(false, res.isValid, 'Should be invalid for nonexistent token');
+    }
+
+    @isTest
+    static void testStampAndReturnSourceAlreadySigned() {
+        ContentVersion cv = [SELECT Id FROM ContentVersion WHERE Title = 'SignSource' LIMIT 1];
+        DocGen_Signature_Request__c req = new DocGen_Signature_Request__c(
+            Signer_Name__c = 'John',
+            Source_Document_Id__c = cv.Id,
+            Secure_Token__c = 'tok-stamp-signed',
+            Status__c = 'Signed'
+        );
+        insert req;
+
+        String fakeBase64 = EncodingUtil.base64Encode(Blob.valueOf('fakeImage'));
+        Boolean threw = false;
+        String message = '';
+        Test.startTest();
+        try {
+            DocGenSignatureController.stampAndReturnSource('tok-stamp-signed', fakeBase64);
+        } catch (AuraHandledException e) {
+            threw = true;
+            message = e.getMessage();
+        } catch (Exception e) {
+            threw = true;
+            message = e.getMessage();
+        }
+        Test.stopTest();
+
+        System.assert(threw, 'Should throw for already signed request');
+        System.assert(message.contains('already been signed'), message);
+    }
+
+    @isTest
+    static void testStampAndReturnSourceCancelled() {
+        ContentVersion cv = [SELECT Id FROM ContentVersion WHERE Title = 'SignSource' LIMIT 1];
+        DocGen_Signature_Request__c req = new DocGen_Signature_Request__c(
+            Signer_Name__c = 'John',
+            Source_Document_Id__c = cv.Id,
+            Secure_Token__c = 'tok-stamp-cancelled',
+            Status__c = 'Cancelled'
+        );
+        insert req;
+
+        String fakeBase64 = EncodingUtil.base64Encode(Blob.valueOf('fakeImage'));
+        Boolean threw = false;
+        String message = '';
+        Test.startTest();
+        try {
+            DocGenSignatureController.stampAndReturnSource('tok-stamp-cancelled', fakeBase64);
+        } catch (AuraHandledException e) {
+            threw = true;
+            message = e.getMessage();
+        } catch (Exception e) {
+            threw = true;
+            message = e.getMessage();
+        }
+        Test.stopTest();
+
+        System.assert(threw, 'Should throw for cancelled request');
+        System.assert(message.contains('already been signed'), message);
+    }
+
+    @isTest
+    static void testStampAndReturnSourceInvalidToken() {
+        String fakeBase64 = EncodingUtil.base64Encode(Blob.valueOf('fakeImage'));
+        Boolean threw = false;
+        String message = '';
+        Test.startTest();
+        try {
+            DocGenSignatureController.stampAndReturnSource('nonexistent-token', fakeBase64);
+        } catch (AuraHandledException e) {
+            threw = true;
+            message = e.getMessage();
+        } catch (Exception e) {
+            threw = true;
+            message = e.getMessage();
+        }
+        Test.stopTest();
+
+        System.assert(threw, 'Should throw for invalid token');
+        System.assert(message.contains('Invalid request'), message);
+    }
+
+    @isTest
+    static void testFinishSignatureUploadInvalidToken() {
+        String fakePdfBase64 = EncodingUtil.base64Encode(Blob.valueOf('fakePdfContent'));
+        Boolean threw = false;
+        String message = '';
+        Test.startTest();
+        try {
+            DocGenSignatureController.finishSignatureUpload('nonexistent-token', fakePdfBase64, 'SignedDoc.pdf');
+        } catch (AuraHandledException e) {
+            threw = true;
+            message = e.getMessage();
+        } catch (Exception e) {
+            threw = true;
+            message = e.getMessage();
+        }
+        Test.stopTest();
+
+        System.assert(threw, 'Should throw for invalid token');
+        System.assert(message.contains('Request not found'), message);
     }
 }

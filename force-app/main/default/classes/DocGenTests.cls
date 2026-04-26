@@ -1,7 +1,7 @@
 @isTest
 private class DocGenTests {
 
-    @testSetup
+    @TestSetup
     static void setup() {
         DocGen_Template__c tpl = new DocGen_Template__c(
             Name = 'Test Template',
@@ -209,13 +209,20 @@ private class DocGenTests {
         Test.stopTest();
 
         System.assertNotEquals(null, docId, 'Should return ContentDocumentId');
-        List<ContentDocumentLink> links = [SELECT Id FROM ContentDocumentLink WHERE LinkedEntityId = :acc.Id AND ContentDocumentId = :docId];
+        List<ContentDocumentLink> links = [SELECT Id, Visibility FROM ContentDocumentLink WHERE LinkedEntityId = :acc.Id AND ContentDocumentId = :docId];
         System.assertEquals(1, links.size(), 'Document should be linked to account');
+        System.assertEquals('InternalUsers', links[0].Visibility, 'Visibility should be restricted to InternalUsers');
     }
 
     @isTest
     static void testPreviewRecordData() {
         Account acc = [SELECT Id FROM Account LIMIT 1];
+
+        PermissionSet ps = [SELECT Id FROM PermissionSet WHERE Name = 'DocGen_Admin' LIMIT 1];
+        List<PermissionSetAssignment> existing = [SELECT Id FROM PermissionSetAssignment WHERE AssigneeId = :UserInfo.getUserId() AND PermissionSetId = :ps.Id];
+        if (existing.isEmpty()) {
+            insert new PermissionSetAssignment(AssigneeId = UserInfo.getUserId(), PermissionSetId = ps.Id);
+        }
 
         Test.startTest();
         Map<String, Object> data = DocGenController.previewRecordData(acc.Id, 'Account', 'Id, Name');
@@ -223,6 +230,42 @@ private class DocGenTests {
 
         System.assertNotEquals(null, data, 'Data should not be null');
         System.assertEquals('Test Account', data.get('Name'), 'Name should match');
+    }
+
+    @isTest
+    static void testPreviewRecordData_InsufficientPrivileges() {
+        Profile p = [SELECT Id FROM Profile WHERE Name = 'Standard User' LIMIT 1];
+        User u = new User(
+            Alias = 'standt',
+            Email = 'standarduser@testorg.com',
+            EmailEncodingKey = 'UTF-8',
+            LastName = 'Testing',
+            LanguageLocaleKey = 'en_US',
+            LocaleSidKey = 'en_US',
+            ProfileId = p.Id,
+            TimeZoneSidKey = 'America/Los_Angeles',
+            UserName = 'standarduser' + System.currentTimeMillis() + '@testorg.com',
+            UserRoleId = UserInfo.getUserRoleId()
+        );
+        insert u;
+
+        Account acc = [SELECT Id FROM Account LIMIT 1];
+
+        Boolean threw = false;
+        String message = '';
+        Test.startTest();
+        System.runAs(u) {
+            try {
+                DocGenController.previewRecordData(acc.Id, 'Account', 'Id, Name');
+            } catch (DocGenException e) {
+                threw = true;
+                message = e.getMessage();
+            }
+        }
+        Test.stopTest();
+
+        System.assert(threw, 'Should throw DocGenException for insufficient privileges');
+        System.assert(message.contains('Insufficient privileges'), 'Exception message should mention insufficient privileges');
     }
 
     @isTest
@@ -746,5 +789,95 @@ private class DocGenTests {
 
         DocGen_Settings__c settings = DocGen_Settings__c.getOrgDefaults();
         System.assertEquals('https://test.example.com', settings.Experience_Site_Url__c, 'Settings should be saved');
+    }
+
+    @isTest
+    static void testValidateFieldsConfigValidSimpleFields() {
+        Account acc = [SELECT Id FROM Account LIMIT 1];
+        Test.startTest();
+        Map<String, Object> data = DocGenDataRetriever.getRecordData(acc.Id, 'Account', 'Id, Name, AccountSource');
+        Test.stopTest();
+        System.assertNotEquals(null, data, 'Data should not be null');
+        System.assertEquals('Test Account', data.get('Name'), 'Name should match');
+    }
+
+    @isTest
+    static void testValidateFieldsConfigValidParentPath() {
+        Account acc = [SELECT Id FROM Account LIMIT 1];
+        Test.startTest();
+        Map<String, Object> data = DocGenDataRetriever.getRecordData(acc.Id, 'Account', 'Id, Name, Owner.Name');
+        Test.stopTest();
+        System.assertNotEquals(null, data, 'Data should not be null');
+        System.assertEquals('Test Account', data.get('Name'), 'Name should match');
+    }
+
+    @isTest
+    static void testValidateFieldsConfigValidSubquery() {
+        Account acc = [SELECT Id FROM Account LIMIT 1];
+        Test.startTest();
+        Map<String, Object> data = DocGenDataRetriever.getRecordData(acc.Id, 'Account', 'Id, Name, (SELECT Id FROM Contacts)');
+        Test.stopTest();
+        System.assertNotEquals(null, data, 'Data should not be null');
+        System.assertEquals('Test Account', data.get('Name'), 'Name should match');
+    }
+
+    @isTest
+    static void testValidateFieldsConfigInvalidFieldRejection() {
+        Account acc = [SELECT Id FROM Account LIMIT 1];
+        Boolean threw = false;
+        Test.startTest();
+        try {
+            DocGenDataRetriever.getRecordData(acc.Id, 'Account', 'Id, InvalidField__c');
+        } catch (DocGenException e) {
+            threw = true;
+            System.assert(e.getMessage().contains('Invalid field'), 'Exception should mention invalid field: ' + e.getMessage());
+        }
+        Test.stopTest();
+        System.assert(threw, 'Should throw for invalid field');
+    }
+
+    @isTest
+    static void testValidateFieldsConfigCommentInjectionRejection() {
+        Account acc = [SELECT Id FROM Account LIMIT 1];
+        Boolean threw = false;
+        Test.startTest();
+        try {
+            DocGenDataRetriever.getRecordData(acc.Id, 'Account', 'Id /* unclosed comment');
+        } catch (DocGenException e) {
+            threw = true;
+            System.assert(e.getMessage().contains('Unclosed block comment'), 'Exception should mention unclosed comment: ' + e.getMessage());
+        }
+        Test.stopTest();
+        System.assert(threw, 'Should throw for comment injection');
+    }
+
+    @isTest
+    static void testValidateFieldsConfigFromKeywordInjectionRejection() {
+        Account acc = [SELECT Id FROM Account LIMIT 1];
+        Boolean threw = false;
+        Test.startTest();
+        try {
+            DocGenDataRetriever.getRecordData(acc.Id, 'Account', 'Id, Name FROM Account');
+        } catch (DocGenException e) {
+            threw = true;
+            System.assert(e.getMessage().contains('FROM keyword'), 'Exception should mention FROM keyword: ' + e.getMessage());
+        }
+        Test.stopTest();
+        System.assert(threw, 'Should throw for FROM keyword injection');
+    }
+
+    @isTest
+    static void testValidateFieldsConfigWhereKeywordInjectionRejection() {
+        Account acc = [SELECT Id FROM Account LIMIT 1];
+        Boolean threw = false;
+        Test.startTest();
+        try {
+            DocGenDataRetriever.getRecordData(acc.Id, 'Account', 'Id, Name WHERE Name = \'x\'');
+        } catch (DocGenException e) {
+            threw = true;
+            System.assert(e.getMessage().contains('WHERE keyword'), 'Exception should mention WHERE keyword: ' + e.getMessage());
+        }
+        Test.stopTest();
+        System.assert(threw, 'Should throw for WHERE keyword injection');
     }
 }

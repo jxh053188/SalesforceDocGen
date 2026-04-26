@@ -39,7 +39,7 @@
     <fieldPermissions>
         <editable>false</editable>
         <field>DocGen_Signature_Request__c.Secure_Token__c</field>
-        <readable>true</readable>
+        <readable>false</readable>
     </fieldPermissions>
     <fieldPermissions>
         <editable>false</editable>

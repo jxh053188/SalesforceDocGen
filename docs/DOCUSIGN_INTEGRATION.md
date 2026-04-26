@@ -314,6 +314,74 @@ Overall DocGen test coverage remains above 90%.
 
 ---
 
+## Envelope Configuration Linking (New in v0.3.0)
+
+DocGen templates can now be linked to DocuSign envelope configurations directly in the Template Manager. This allows admins to control which DocuSign envelope settings (routing order, reminders, expiration, etc.) are used when a document is sent for signature.
+
+### How It Works
+
+1. **Admin links a template to an envelope configuration** in the DocGen Admin UI.
+2. The envelope configuration's source object is validated against the template's `Base_Object_API__c` — only matching configurations are shown.
+3. The signer count is auto-populated from the envelope configuration metadata and stored on the template.
+4. When a user previews a document and clicks **Send with DocuSign**, the preview modal renders one contact picker per signer.
+
+### Envelope Configuration Picker
+
+In `docGenAdmin`, both the **Create Wizard (Step 1)** and the **Edit Modal (Settings tab)** display a new combobox:
+
+- **Label:** DocuSign Envelope Configuration
+- **Options:** All `dfsle__EnvelopeConfiguration__c` records whose source-object field matches the template's base object.
+- **Placeholder:** `-- None --`
+
+When an envelope configuration is selected, the **DocuSign Signer Count** field auto-populates. Admins can override this value (minimum 1, maximum 10).
+
+### Signer Count Field
+
+- **Object:** `DocGen_Template__c`
+- **Field:** `DocuSign_Signer_Count__c`
+- **Type:** Number (precision 2, scale 0)
+- **Default:** 1
+- **Purpose:** Determines how many contact pickers appear in the runner preview modal when sending via DocuSign.
+
+### Runner Preview Flow
+
+The `docGenRunner` component has been simplified:
+
+- **Removed:** Output mode radio group (Download / Save to Record / Send) and the standalone **Generate Document** button.
+- **Kept:** Template selector and **Preview Document** button.
+- **New behavior:** After clicking **Preview Document**, the modal offers three actions:
+  1. **Download** — saves the PDF locally.
+  2. **Save to Record** — attaches the PDF to the source record as a Salesforce File.
+  3. **Send with DocuSign** — visible only if the template has a linked envelope configuration. Generates a DOCX with anchor tags and sends it via `dfsle.EnvelopeService.sendEnvelope()`.
+
+### Multi-Recipient DocuSign Sending
+
+When a user clicks **Send with DocuSign** in the preview modal:
+
+1. An email subject input appears.
+2. `signerCount` contact pickers are rendered (Signer 1, Signer 2, etc.).
+3. Each picker is populated with related Contacts from the source record (Opportunity Contact Roles, Account Contact Roles, Contract Contact Roles, or Person Account).
+4. The user selects a Contact for each signer and clicks **Confirm Send**.
+5. Apex regenerates the document with anchor tags (`DocGenService.generateDocument(templateId, recordId, true)`), resolves the latest `ContentVersion`, builds a `List<DocGenDocuSignService.RecipientInfo>`, and calls `dfsle.EnvelopeService.sendEnvelope()`.
+6. A toast confirms the envelope ID.
+
+### Flow Action Multi-Recipient Support
+
+The **Generate Document (Native)** invocable action now accepts a comma-separated list of recipient Contact IDs.
+
+| Input Variable | Type | Required | Description |
+|----------------|------|----------|-------------|
+| `Recipient Contact IDs (comma-separated)` | String | No | Comma-separated list of Contact IDs. If provided, these Contacts are used as signers in routing order. If blank, falls back to single `recipientContactId` or default recipient resolution. |
+
+**Example Flow assignment:**
+```
+recipientContactIds = {!Get_Contacts_Ids_Comma_Separated}
+```
+
+If both `recipientContactIds` and `recipientContactId` are blank, the integration attempts default recipient resolution from the source record.
+
+---
+
 ## Known Limitations & Future Enhancements
 
 1. **DocuSign template override is stubbed.** The `withDocuSignTemplate()` method exists but only logs an INFO message. Future iterations will support sending with a managed DocuSign template.
@@ -321,6 +389,7 @@ Overall DocGen test coverage remains above 90%.
 3. **Package manifest not updated.** `manifest/package.xml` does not yet list the new DocuSign classes, LWC, or CMT. Add them before creating a package version.
 4. **No bulk sending.** Each Flow action or LWC invocation sends one envelope. For bulk scenarios, iterate in a Flow loop.
 5. **Signed document is DOCX.** DocuSign returns the signed document in its original format. If a PDF is required, convert client-side after envelope completion.
+6. **No test class for `DocGenController.getDocuSignEnvelopeConfigs`.** The design plan specified `DocGenControllerTest.cls`, but it was not created in this iteration. Tests rely on existing coverage.
 
 ---
 
@@ -328,4 +397,5 @@ Overall DocGen test coverage remains above 90%.
 
 | Date | Change |
 |------|--------|
+| 2026-04-26 | Added envelope configuration linking, multi-recipient sending, runner simplification, and preview modal expansion |
 | 2026-04-25 | Initial DocuSign eSignature integration |

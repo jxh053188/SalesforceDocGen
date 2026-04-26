@@ -85,60 +85,7 @@ public with sharing class DocGenDocuSignService {
 
     @TestVisible
     private static Id resolveDefaultRecipient(Id recordId) {
-        Schema.SObjectType recordType = recordId.getSObjectType();
-
-        if (recordType == Opportunity.SObjectType) {
-            List<Opportunity> opps = [
-                SELECT ContactId FROM Opportunity WHERE Id = :recordId WITH USER_MODE LIMIT 1
-            ];
-            if (!opps.isEmpty() && opps[0].ContactId != null) {
-                return opps[0].ContactId;
-            }
-        } else if (recordType == Contract.SObjectType) {
-            List<Contract> contracts = [
-                SELECT CustomerSignedId FROM Contract WHERE Id = :recordId WITH USER_MODE LIMIT 1
-            ];
-            if (!contracts.isEmpty() && contracts[0].CustomerSignedId != null) {
-                return contracts[0].CustomerSignedId;
-            }
-        } else if (recordType == Account.SObjectType) {
-            String accountQuery = 'SELECT Id';
-            Map<String, Schema.SObjectField> accountFields = Schema.SObjectType.Account.fields.getMap();
-            if (accountFields.containsKey('ispersonaccount')) {
-                accountQuery += ', IsPersonAccount';
-            }
-            if (accountFields.containsKey('personcontactid')) {
-                accountQuery += ', PersonContactId';
-            }
-            accountQuery += ' FROM Account WHERE Id = :recordId LIMIT 1';
-            List<Account> accounts = Database.query(accountQuery, AccessLevel.USER_MODE);
-            if (!accounts.isEmpty()) {
-                Account acc = accounts[0];
-                Boolean isPersonAccount = false;
-                Id personContactId = null;
-                if (accountFields.containsKey('ispersonaccount')) {
-                    isPersonAccount = (Boolean) acc.get('IsPersonAccount');
-                }
-                if (accountFields.containsKey('personcontactid')) {
-                    personContactId = (Id) acc.get('PersonContactId');
-                }
-                if (isPersonAccount == true && personContactId != null) {
-                    return personContactId;
-                }
-                List<AccountContactRole> roles = [
-                    SELECT ContactId
-                    FROM AccountContactRole
-                    WHERE AccountId = :recordId AND IsPrimary = true
-                    WITH USER_MODE
-                    ORDER BY CreatedDate DESC
-                    LIMIT 1
-                ];
-                if (!roles.isEmpty()) {
-                    return roles[0].ContactId;
-                }
-            }
-        }
-
-        return null;
+        if (recordId == null) return null;
+        return DocGenObjectResolver.resolveDefaultRecipient(recordId);
     }
 }

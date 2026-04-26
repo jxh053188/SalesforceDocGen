@@ -1,3 +1,7 @@
+/**
+ * @description Tests for DocGenDocuSignService.
+ * Note: resolveDefaultRecipient logic now delegates to DocGenObjectResolver.
+ */
 @isTest
 private class DocGenDocuSignServiceTest {
 

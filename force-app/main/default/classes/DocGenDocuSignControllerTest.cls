@@ -1,3 +1,7 @@
+/**
+ * @description Tests for DocGenDocuSignController.
+ * Note: getRelatedContacts logic now delegates to DocGenObjectResolver.
+ */
 @isTest
 private class DocGenDocuSignControllerTest {
 

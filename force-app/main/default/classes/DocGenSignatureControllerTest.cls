@@ -102,6 +102,33 @@ private class DocGenSignatureControllerTest {
     }
 
     @isTest
+    static void testValidateToken_ConcurrentDuplicatePrevention() {
+        ContentVersion cv = [SELECT Id FROM ContentVersion WHERE Title = 'SignSource' LIMIT 1];
+        DocGen_Signature_Request__c req = new DocGen_Signature_Request__c(
+            Signer_Name__c = 'John Doe',
+            Source_Document_Id__c = cv.Id,
+            Secure_Token__c = 'tok-concurrent',
+            Status__c = 'Sent'
+        );
+        insert req;
+
+        Test.startTest();
+        DocGenSignatureController.SignatureInitResponse res1 = DocGenSignatureController.validateToken('tok-concurrent');
+        DocGenSignatureController.SignatureInitResponse res2 = DocGenSignatureController.validateToken('tok-concurrent');
+        Test.stopTest();
+
+        System.assertEquals(true, res1.isValid, 'First call should be valid');
+        System.assertEquals(true, res2.isValid, 'Second call should be valid');
+        System.assertNotEquals(null, res1.documentUrl, 'First call should have document URL');
+        System.assertNotEquals(null, res2.documentUrl, 'Second call should have document URL');
+
+        List<ContentDistribution> dists = [
+            SELECT Id FROM ContentDistribution WHERE ContentVersionId = :cv.Id
+        ];
+        System.assertEquals(1, dists.size(), 'Exactly one ContentDistribution should exist for the ContentVersion');
+    }
+
+    @isTest
     static void testFetchDocumentData() {
         ContentVersion cv = [SELECT Id FROM ContentVersion WHERE Title = 'SignSource' LIMIT 1];
         DocGen_Signature_Request__c req = new DocGen_Signature_Request__c(

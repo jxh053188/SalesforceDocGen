@@ -32,6 +32,7 @@ import FILESAVER_JS from '@salesforce/resourceUrl/filesaver';
 import HANDLEBARS_JS from '@salesforce/resourceUrl/handlebars';
 import { generatePdfFromIframe } from 'c/docGenPdfUtils';
 import DocGenPreviewModal from 'c/docGenPreviewModal';
+import { registerHandlebarsHelpers, base64ToUtf8String, base64ToBinaryUint8Array, flattenData, configureDocxtemplater, renderDocxTemplate, renderHtmlTemplate, generateBlobFromDocx, orchestratePdfGeneration, downloadBlob } from 'c/docGenEngine';
 
 const COLUMNS = [
     { label: 'Category', fieldName: 'Category__c', initialWidth: 150 },
@@ -686,12 +687,6 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             return;
         }
 
-        // --- SELF HEAL SAMPLE DATA ---
-        if (this.editTemplateName === 'Sample Quote Template' && this.editTemplateQuery && !this.editTemplateQuery.toLowerCase().includes('quotelineitems')) {
-            console.log('DEBUG: Auto-healing sample query config...');
-            this.editTemplateQuery += ', (SELECT Product2.Name, Description, Quantity, UnitPrice, TotalPrice FROM QuoteLineItems)';
-        }
-
         // 1. Save First
         await this.handleSaveOnly();
 
@@ -718,7 +713,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             let recordData;
             try {
                 const rawData = JSON.parse(JSON.stringify(result.data));
-                recordData = this.flattenData(rawData);
+                recordData = flattenData(rawData);
                 console.log('DocGen Admin: Record data:')
                 console.log(recordData);
             } catch (jsonErr) {
@@ -727,114 +722,13 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
 
             const baseName = 'Sample_' + (recordData.Name || 'Document');
 
-            // HTML + Handlebars path
             if (templateType === 'HTML') {
                 if (!window.Handlebars) {
                     throw new Error('Handlebars library not loaded.');
                 }
-                // *** THE LWS FIX: Override standard helpers to bypass array checks ***
-                window.Handlebars.registerHelper('each', function (context, options) {
-                    let ret = '';
-                    let inverse = options.inverse || function () { return ''; };
-
-                    // Duck-typing for arrays across Lightning Web Security boundaries
-                    if (context && typeof context === 'object' && typeof context.length === 'number') {
-                        if (context.length === 0) {
-                            return inverse(this);
-                        }
-                        for (let i = 0; i < context.length; i++) {
-                            ret += options.fn(context[i]);
-                        }
-                    } else {
-                        return inverse(this);
-                    }
-                    return ret;
-                });
-
-                window.Handlebars.registerHelper('ifList', function (...args) {
-                    const options = args[args.length - 1]; // Handlebars options always last
-                    let list = args[0];
-                    const operator = args.length > 2 ? args[1] : ">0";
-
-                    // Duck-typing for arrays traversing Lightning Web Security boundary
-                    // Note: direct length checks fail on LWS Proxies, we must test iteration length or assume array if it's an object with >0 keys
-                    const isListDef = list && typeof list === 'object' && (Array.isArray(list) || typeof list.length === 'number');
-
-                    if (!isListDef) {
-                        return (typeof options.inverse === 'function') ? options.inverse(this) : '';
-                    }
-
-                    // For LWS Proxies we try to force it to a real array if it acts like one
-                    if (!Array.isArray(list)) {
-                        try {
-                            list = Array.from(list);
-                        } catch (e) {
-                            // Fallback if Array.from fails on the proxy
-                            const temp = [];
-                            for (let i = 0; i < list.length; i++) temp.push(list[i]);
-                            list = temp;
-                        }
-                    }
-
-                    let isMatch = false;
-
-                    // "count" indicates we want to filter the list and THEN check length > 0
-                    if (operator === 'count' && args.length >= 6) {
-                        const field = args[2];
-                        const compOp = args[3];
-                        const compVal = args[4];
-
-                        const filtered = list.filter(item => {
-                            let itemVal = item[field];
-                            if (itemVal === undefined || itemVal === null) return false;
-
-                            // Numeric comparison if possible
-                            if (!isNaN(itemVal) && !isNaN(compVal)) {
-                                if (compOp === '=' || compOp === '==' || compOp === '===') {
-                                    return Number(itemVal) === Number(compVal);
-                                }
-                                if (compOp === '!=' || compOp === '!==') {
-                                    return Number(itemVal) !== Number(compVal);
-                                }
-                                if (compOp === '>') return Number(itemVal) > Number(compVal);
-                                if (compOp === '>=') return Number(itemVal) >= Number(compVal);
-                                if (compOp === '<') return Number(itemVal) < Number(compVal);
-                                if (compOp === '<=') return Number(itemVal) <= Number(compVal);
-                            }
-
-                            // String default
-                            let sItem = String(itemVal).trim().toLowerCase();
-                            let sComp = String(compVal).trim().toLowerCase();
-                            switch (compOp) {
-                                case '=':
-                                case '==':
-                                case '===':
-                                    return sItem === sComp;
-                                case '!=':
-                                case '!==':
-                                    return sItem !== sComp;
-                                default:
-                                    return false;
-                            }
-                        });
-                        isMatch = (filtered.length > 0);
-                    } else {
-                        // Simple length check
-                        if (operator === '>0' || !operator) {
-                            isMatch = (list.length > 0);
-                        } else if (operator === '=0') {
-                            isMatch = (list.length === 0);
-                        }
-                    }
-
-                    if (isMatch) {
-                        return (typeof options.fn === 'function') ? options.fn(this) : '';
-                    } else {
-                        return (typeof options.inverse === 'function') ? options.inverse(this) : '';
-                    }
-                });
+                registerHandlebarsHelpers();
                 console.log('DEBUG: HTML template. Rendering with Handlebars...');
-                const htmlString = this.base64ToUtf8String(templateData);
+                const htmlString = base64ToUtf8String(templateData);
                 const template = window.Handlebars.compile(htmlString);
                 const renderedHtml = template(recordData, {
                     allowProtoPropertiesByDefault: false,
@@ -854,16 +748,16 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                         fileName: baseName
                     };
 
-                    const pdfBlob = await generatePdfFromIframe(iframe, messageData);
+                    const pdfBlob = await orchestratePdfGeneration(iframe, messageData);
                     await this._handleTestPdfBlobResult(pdfBlob, baseName, isPreview);
 
                 } else {
                     const blob = new Blob([renderedHtml], { type: 'application/octet-stream' });
                     if (isPreview) {
                         this.showToast('Warning', 'Preview is only supported for PDF output. Downloading instead.', 'warning');
-                        window.saveAs(blob, baseName + '.html');
+                        downloadBlob(blob, baseName + '.html');
                     } else {
-                        window.saveAs(blob, baseName + '.html');
+                        downloadBlob(blob, baseName + '.html');
                         this.showToast('Success', 'Sample HTML document downloaded.', 'success');
                     }
                 }
@@ -875,60 +769,27 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 return;
             }
 
-            const binaryString = this.base64ToUtf8String(templateData);
-            const bytes = new Uint8Array(binaryString.length);
-            for (let i = 0; i < binaryString.length; i++) {
-                bytes[i] = binaryString.charCodeAt(i);
-            }
-
-            const zip = new window.PizZip(bytes.buffer);
-            const doc = new window.docxtemplater(zip, {
-                paragraphLoop: true,
-                linebreaks: true,
-                delimiters: { start: '{', end: '}' },
-                nullGetter: () => { return ''; },
-                parser: (tag) => {
-                    return {
-                        get: (scope) => {
-                            if (tag === '.') return scope;
-                            const keys = tag.split('.');
-                            let value = scope;
-                            for (let i = 0; i < keys.length; i++) {
-                                if (value === undefined || value === null) return '';
-                                value = value[keys[i]];
-                            }
-                            return value;
-                        }
-                    };
-                }
-            });
-
-            doc.render(recordData);
-
-            const isPPT = templateType === 'PowerPoint';
-            const isPDF = this.editTemplateOutputFormat === 'PDF' && !isPPT;
+            const doc = renderDocxTemplate(templateData, recordData);
+            const { blob, extension, isPDF, isPPT } = generateBlobFromDocx(doc, templateType, this.editTemplateOutputFormat);
 
             if (isPPT) {
-                const outBlob = doc.getZip().generate({ type: 'blob' });
                 if (isPreview) {
                     this.showToast('Warning', 'Preview is only supported for PDF output. Downloading instead.', 'warning');
-                    window.saveAs(outBlob, baseName + '.pptx');
+                    downloadBlob(blob, baseName + '.pptx');
                 } else {
-                    window.saveAs(outBlob, baseName + '.pptx');
+                    downloadBlob(blob, baseName + '.pptx');
                     this.showToast('Success', 'Sample PowerPoint downloaded.', 'success');
                 }
             } else if (!isPDF) {
-                const outBlob = doc.getZip().generate({ type: 'blob' });
                 if (isPreview) {
                     this.showToast('Warning', 'Preview is only supported for PDF output. Downloading instead.', 'warning');
-                    window.saveAs(outBlob, baseName + '.docx');
+                    downloadBlob(blob, baseName + '.docx');
                 } else {
-                    window.saveAs(outBlob, baseName + '.docx');
+                    downloadBlob(blob, baseName + '.docx');
                     this.showToast('Success', 'Sample Word document downloaded.', 'success');
                 }
             } else {
                 this.showToast('Info', 'Generating PDF Sample...', 'info');
-                const docxBuffer = doc.getZip().generate({ type: 'arraybuffer' });
                 const iframe = this.template.querySelector('iframe');
                 if (!iframe) {
                     this.showToast('Error', 'PDF Engine not found in DOM.', 'error');
@@ -937,11 +798,11 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
 
                 const messageData = {
                     type: 'generate',
-                    blob: docxBuffer,
+                    blob: blob,
                     fileName: baseName
                 };
 
-                const pdfBlob = await generatePdfFromIframe(iframe, messageData);
+                const pdfBlob = await orchestratePdfGeneration(iframe, messageData);
                 await this._handleTestPdfBlobResult(pdfBlob, baseName, isPreview);
             }
 
@@ -967,42 +828,10 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 fileName: baseName + '.pdf'
             });
         } else {
-            window.saveAs(pdfBlob, baseName + '.pdf');
+            downloadBlob(pdfBlob, baseName + '.pdf');
             this.showToast('Success', 'Sample PDF downloaded.', 'success');
             this.isLoadingVersions = false;
         }
-    }
-
-    base64ToUtf8String(base64) {
-        const binaryString = atob(base64);
-        const len = binaryString.length;
-        const bytes = new Uint8Array(len);
-        for (let i = 0; i < len; i++) {
-            bytes[i] = binaryString.charCodeAt(i);
-        }
-        return new TextDecoder('utf-8').decode(bytes);
-    }
-
-    flattenData(obj) {
-        if (!obj || typeof obj !== 'object') return obj;
-
-        // Deep clone arrays to natively bypass LWS Object.keys() / length proxy blocks
-        if (Array.isArray(obj)) {
-            return obj.map(item => this.flattenData(item));
-        }
-
-        if (obj.hasOwnProperty('totalSize') && obj.hasOwnProperty('records')) {
-            return this.flattenData(obj.records);
-        }
-
-        const newObj = {};
-        for (const key in obj) {
-            if (Object.prototype.hasOwnProperty.call(obj, key)) {
-                if (key === 'attributes') continue;
-                newObj[key] = this.flattenData(obj[key]);
-            }
-        }
-        return newObj;
     }
 
     handleEditUploadFinished(event) {

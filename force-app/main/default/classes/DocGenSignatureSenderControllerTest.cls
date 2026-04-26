@@ -166,4 +166,63 @@ public class DocGenSignatureSenderControllerTest {
 
         Assert.areEqual(5, tokens.size(), 'All 5 tokens should be unique');
     }
+
+    @isTest
+    static void createSignatureRequest_blankSiteUrl() {
+        ContentVersion cv = [
+            SELECT Id, ContentDocumentId
+            FROM ContentVersion
+            WHERE Title = 'Test Document'
+            LIMIT 1
+        ];
+
+        Account acc = new Account(Name = 'Blank Site Account');
+        insert acc;
+
+        // Clear the site URL setting
+        DocGen_Settings__c settings = DocGen_Settings__c.getOrgDefaults();
+        settings.Experience_Site_Url__c = null;
+        update settings;
+
+        Test.startTest();
+        String url = DocGenSignatureSenderController.createSignatureRequest(
+            cv.ContentDocumentId,
+            acc.Id,
+            'Test Signer',
+            'test@example.com'
+        );
+        Test.stopTest();
+
+        Assert.isTrue(url.contains('token='), 'Returned URL should contain a token parameter');
+        Assert.isTrue(url.startsWith('https://<CONFIGURE_SITE_URL_IN_SETUP>'), 'Should use default placeholder URL when no site URL is configured');
+    }
+
+    @isTest
+    static void createSignatureRequest_urlWithQueryParam() {
+        ContentVersion cv = [
+            SELECT Id, ContentDocumentId
+            FROM ContentVersion
+            WHERE Title = 'Test Document'
+            LIMIT 1
+        ];
+
+        Account acc = new Account(Name = 'QueryParam Account');
+        insert acc;
+
+        DocGen_Settings__c settings = DocGen_Settings__c.getOrgDefaults();
+        settings.Experience_Site_Url__c = 'https://test.example.com/s/sign?src=email';
+        update settings;
+
+        Test.startTest();
+        String url = DocGenSignatureSenderController.createSignatureRequest(
+            cv.ContentDocumentId,
+            acc.Id,
+            'Test Signer',
+            'test@example.com'
+        );
+        Test.stopTest();
+
+        Assert.isTrue(url.contains('&token='), 'URL with existing query param should use ampersand separator');
+        Assert.isTrue(url.startsWith('https://test.example.com/s/sign?src=email&token='), 'URL should preserve existing query params');
+    }
 }

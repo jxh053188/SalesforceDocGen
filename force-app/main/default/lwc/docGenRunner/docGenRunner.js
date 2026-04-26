@@ -9,7 +9,7 @@ import DOCXTEMPLATER_JS from '@salesforce/resourceUrl/docxtemplater';
 import FILESAVER_JS from '@salesforce/resourceUrl/filesaver';
 import HANDLEBARS_JS from '@salesforce/resourceUrl/handlebars';
 import DocGenPreviewModal from 'c/docGenPreviewModal';
-import { base64ToUtf8String, flattenData, renderDocxTemplate, renderHtmlTemplate, generateBlobFromDocx, orchestratePdfGeneration, downloadBlob } from 'c/docGenEngine';
+import { flattenData, renderDocxTemplate, renderHtmlTemplate, generateBlobFromDocx, orchestratePdfGeneration, downloadBlob } from 'c/docGenEngine';
 
 export default class DocGenRunner extends LightningElement {
     @api recordId;

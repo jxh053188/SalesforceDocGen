@@ -398,7 +398,7 @@ private class DocGenSignatureControllerTest {
     static void testValidateTokenMissingContentVersion() {
         DocGen_Signature_Request__c req = new DocGen_Signature_Request__c(
             Signer_Name__c = 'John Doe',
-            Source_Document_Id__c = '068000000000000',
+            Source_Document_Id__c = Schema.SObjectType.ContentVersion.getKeyPrefix() + '000000000000',
             Secure_Token__c = 'tok-missing-cv',
             Status__c = 'Sent'
         );

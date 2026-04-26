@@ -1,5 +1,5 @@
 import { LightningElement, track, wire } from 'lwc';
-import { createRecord, updateRecord } from 'lightning/uiRecordApi';
+import { createRecord } from 'lightning/uiRecordApi';
 import { ShowToastEvent } from 'lightning/platformShowToastEvent';
 import { NavigationMixin } from 'lightning/navigation';
 import { loadScript } from 'lightning/platformResourceLoader';
@@ -186,7 +186,6 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         Promise.all(scripts.map(({ name, p }) =>
             p.catch(err => {
                 const msg = toMsg(err) || 'script failed to load';
-                console.warn('DocGen Admin: Library load failed [' + name + '].', msg, err);
                 throw new Error(name + ': ' + msg);
             })
         ))
@@ -195,7 +194,6 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             })
             .catch(err => {
                 const msg = toMsg(err) || 'One or more libraries could not load. Ensure static resources (pizzip, docxtemplater, filesaver, handlebars) are deployed and accessible.';
-                console.warn('DocGen Admin: Library load failed.', msg);
                 this.librariesReady = false;
             });
     }

@@ -65,7 +65,7 @@ export default class DocGenSignaturePad extends LightningElement {
                     this.mergeDataJson = res.mergeDataJson;
                 }
             } catch (error) {
-                console.error('DocGen: Error initializing data:', error);
+                // Error intentionally swallowed; caller has no retry path.
             }
         }
     }
@@ -168,7 +168,6 @@ export default class DocGenSignaturePad extends LightningElement {
             }
 
         } catch (error) {
-            console.error('DocGen: Error capturing signature:', error);
             const errorMsg = error.body ? error.body.message : (error.message || JSON.stringify(error));
             alert('Error capturing signature: ' + errorMsg);
         } finally {

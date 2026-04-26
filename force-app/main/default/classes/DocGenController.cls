@@ -54,7 +54,7 @@ public with sharing class DocGenController {
             cdl.ContentDocumentId = contentDocId;
             cdl.LinkedEntityId = recordId;
             cdl.ShareType = 'V';
-            cdl.Visibility = 'AllUsers';
+            cdl.Visibility = 'InternalUsers'; // Restrict to internal users only; prevents exposure to Experience Cloud external users
             insert cdl;
 
             return contentDocId;
@@ -68,7 +68,11 @@ public with sharing class DocGenController {
         if (recordId == null || String.isBlank(baseObject) || String.isBlank(queryConfig)) {
             return null;
         }
-        
+
+        if (!FeatureManagement.checkPermission('DocGen_Administrator')) {
+            throw new DocGenException('Insufficient privileges: DocGen Administrator permission required.');
+        }
+
         try {
             return DocGenDataRetriever.getRecordData(recordId, baseObject, queryConfig);
         } catch (Exception e) {
@@ -112,14 +116,11 @@ public with sharing class DocGenController {
             template.Query_Metadata__c = (String) fields.get('Query_Metadata__c');
             template.Test_Record_Id__c = (String) fields.get('Test_Record_Id__c');
             template.Document_Title_Format__c = (String) fields.get('Document_Title_Format__c');
-            
-            update template;
-            
-            // Update Output Format if provided
             if (fields.containsKey('Output_Format__c')) {
                 template.Output_Format__c = (String) fields.get('Output_Format__c');
-                update template;
             }
+
+            update template;
             
             // 2. Create Version if requested
             if (createVersion == true) {

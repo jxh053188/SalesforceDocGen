@@ -1,0 +1,1 @@
+- [DocGen Security Patterns](project_security_patterns.md) — Security constraints and patterns for dynamic SOQL, PDF engine iframe, Handlebars rendering, and static resources

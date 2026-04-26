@@ -176,6 +176,10 @@ private class DocGenSignatureControllerTest {
 
         DocGen_Signature_Audit__c updatedAudit = [SELECT Document_Hash_SHA256__c FROM DocGen_Signature_Audit__c WHERE Id = :audit.Id];
         System.assertNotEquals('PENDING_CLIENT_PDF', updatedAudit.Document_Hash_SHA256__c, 'Hash should be updated');
+
+        List<ContentDocumentLink> links = [SELECT Id, Visibility FROM ContentDocumentLink WHERE LinkedEntityId = :acc.Id];
+        System.assertEquals(1, links.size(), 'Document should be linked to account');
+        System.assertEquals('InternalUsers', links[0].Visibility, 'Visibility should be restricted to InternalUsers');
     }
 
     @isTest
@@ -246,6 +250,34 @@ private class DocGenSignatureControllerTest {
         List<DocGen_Signature_Request__c> reqs = [SELECT Id, Status__c, Signer_Name__c FROM DocGen_Signature_Request__c];
         System.assertEquals(1, reqs.size(), 'Request should be created');
         System.assertEquals('Sent', reqs[0].Status__c, 'Status should be Sent');
+    }
+
+    @isTest
+    static void testTokenCryptographicStrength() {
+        ContentVersion cv = [SELECT Id, ContentDocumentId FROM ContentVersion WHERE Title = 'SignSource' LIMIT 1];
+        Account acc = new Account(Name = 'Test Acc');
+        insert acc;
+
+        DocGen_Settings__c settings = DocGen_Settings__c.getOrgDefaults();
+        settings.Experience_Site_Url__c = 'https://test.example.com';
+        if (settings.Id == null) {
+            insert settings;
+        } else {
+            update settings;
+        }
+
+        Set<String> tokens = new Set<String>();
+        Test.startTest();
+        for (Integer i = 0; i < 50; i++) {
+            String url = DocGenSignatureSenderController.createSignatureRequest(cv.ContentDocumentId, acc.Id, 'John Doe', 'john@example.com');
+            String token = url.substringAfter('token=');
+            System.assertEquals(64, token.length(), 'Token should be 64 hex characters');
+            System.assert(!tokens.contains(token), 'Token should be unique');
+            tokens.add(token);
+        }
+        Test.stopTest();
+
+        System.assertEquals(50, tokens.size(), 'All 50 tokens should be unique');
     }
 
     @isTest

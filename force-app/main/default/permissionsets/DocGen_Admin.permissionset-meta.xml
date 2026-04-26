@@ -250,4 +250,8 @@
         <tab>DocGen_Template__c</tab>
         <visibility>Visible</visibility>
     </tabSettings>
+    <customPermissions>
+        <enabled>true</enabled>
+        <name>DocGen_Administrator</name>
+    </customPermissions>
 </PermissionSet>

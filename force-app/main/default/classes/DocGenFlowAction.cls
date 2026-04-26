@@ -13,6 +13,9 @@ global with sharing class DocGenFlowAction {
         @InvocableVariable(label='Recipient Contact ID' required=false)
         global Id recipientContactId;
 
+        @InvocableVariable(label='Recipient Contact IDs (comma-separated)' required=false)
+        global String recipientContactIds;
+
         @InvocableVariable(label='Email Subject' required=false)
         global String emailSubject;
     }
@@ -53,12 +56,35 @@ global with sharing class DocGenFlowAction {
                     if (cvs.isEmpty()) {
                         throw new DocGenException('Latest ContentVersion not found for generated document.');
                     }
-                    res.envelopeId = DocGenDocuSignService.sendDocumentForSignature(
-                        cvs[0].Id,
-                        req.recordId,
-                        req.recipientContactId,
-                        req.emailSubject
-                    );
+
+                    if (String.isNotBlank(req.recipientContactIds)) {
+                        List<DocGenDocuSignService.RecipientInfo> recipients = new List<DocGenDocuSignService.RecipientInfo>();
+                        List<String> ids = req.recipientContactIds.split(',');
+                        Integer idx = 1;
+                        for (String cid : ids) {
+                            String trimmed = cid.trim();
+                            if (String.isBlank(trimmed)) continue;
+                            DocGenDocuSignService.RecipientInfo ri = new DocGenDocuSignService.RecipientInfo();
+                            ri.contactId = trimmed;
+                            ri.routingOrder = idx;
+                            ri.role = 'Signer ' + idx;
+                            recipients.add(ri);
+                            idx++;
+                        }
+                        res.envelopeId = DocGenDocuSignService.sendDocumentForSignature(
+                            cvs[0].Id,
+                            req.recordId,
+                            recipients,
+                            req.emailSubject
+                        );
+                    } else {
+                        res.envelopeId = DocGenDocuSignService.sendDocumentForSignature(
+                            cvs[0].Id,
+                            req.recordId,
+                            req.recipientContactId,
+                            req.emailSubject
+                        );
+                    }
                 }
             } catch (Exception e) {
                 res.errorMessage = e.getMessage();

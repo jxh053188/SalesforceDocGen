@@ -54,4 +54,52 @@ public with sharing class DocGenDocuSignController {
             throw new AuraHandledException(e.getMessage());
         }
     }
+
+    @AuraEnabled
+    public static Map<String, String> generateAndSendWithRecipients(
+        Id templateId,
+        Id recordId,
+        List<Map<String, String>> recipientInputs,
+        String emailSubject,
+        Id envelopeConfigurationId
+    ) {
+        try {
+            Id contentDocId = DocGenService.generateDocument(templateId, recordId, true);
+
+            List<ContentVersion> cvs = [
+                SELECT Id FROM ContentVersion
+                WHERE ContentDocumentId = :contentDocId AND IsLatest = true
+                WITH USER_MODE LIMIT 1
+            ];
+            if (cvs.isEmpty()) {
+                throw new AuraHandledException('Generated document version not found.');
+            }
+
+            List<DocGenDocuSignService.RecipientInfo> recipients = new List<DocGenDocuSignService.RecipientInfo>();
+            Integer idx = 1;
+            for (Map<String, String> ri : recipientInputs) {
+                DocGenDocuSignService.RecipientInfo r = new DocGenDocuSignService.RecipientInfo();
+                r.contactId = ri.get('contactId');
+                r.routingOrder = idx;
+                r.role = 'Signer ' + idx;
+                recipients.add(r);
+                idx++;
+            }
+
+            String envelopeId = DocGenDocuSignService.sendDocumentForSignature(
+                cvs[0].Id,
+                recordId,
+                recipients,
+                emailSubject,
+                envelopeConfigurationId
+            );
+
+            return new Map<String, String>{
+                'contentDocumentId' => contentDocId,
+                'envelopeId' => envelopeId
+            };
+        } catch (Exception e) {
+            throw new AuraHandledException(e.getMessage());
+        }
+    }
 }

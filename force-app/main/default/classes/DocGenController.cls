@@ -90,8 +90,9 @@ public with sharing class DocGenController {
     @AuraEnabled(cacheable=true)
     public static List<DocGen_Template__c> getTemplatesForObject(String objectApiName) {
         return [
-            SELECT Id, Name, Description__c, Type__c, Output_Format__c 
-            FROM DocGen_Template__c 
+            SELECT Id, Name, Description__c, Type__c, Output_Format__c,
+                   DocuSign_Envelope_Configuration__c, DocuSign_Signer_Count__c
+            FROM DocGen_Template__c
             WHERE Base_Object_API__c = :objectApiName
             WITH USER_MODE
         ];
@@ -101,8 +102,9 @@ public with sharing class DocGenController {
     public static List<DocGen_Template__c> getAllTemplates() {
         return [
             SELECT Id, Name, Description__c, Type__c, Base_Object_API__c, Category__c, Query_Config__c, Query_Metadata__c, Test_Record_Id__c, Output_Format__c, Document_Title_Format__c,
+                   DocuSign_Envelope_Configuration__c, DocuSign_Signer_Count__c,
                    (SELECT ContentDocumentId FROM ContentDocumentLinks ORDER BY ContentDocument.CreatedDate DESC LIMIT 1)
-            FROM DocGen_Template__c 
+            FROM DocGen_Template__c
             WITH USER_MODE
             ORDER BY Category__c ASC, Name ASC
         ];
@@ -125,6 +127,12 @@ public with sharing class DocGenController {
             template.Document_Title_Format__c = (String) fields.get('Document_Title_Format__c');
             if (fields.containsKey('Output_Format__c')) {
                 template.Output_Format__c = (String) fields.get('Output_Format__c');
+            }
+            if (fields.containsKey('DocuSign_Envelope_Configuration__c')) {
+                template.DocuSign_Envelope_Configuration__c = (Id) fields.get('DocuSign_Envelope_Configuration__c');
+            }
+            if (fields.containsKey('DocuSign_Signer_Count__c')) {
+                template.DocuSign_Signer_Count__c = (Decimal) fields.get('DocuSign_Signer_Count__c');
             }
 
             update template;
@@ -169,7 +177,9 @@ public with sharing class DocGenController {
                 version.Description__c = (String) fields.get('Description__c');
                 version.Type__c = (String) fields.get('Type__c');
                 version.Base_Object_API__c = (String) fields.get('Base_Object_API__c');
-                
+                version.DocuSign_Envelope_Configuration__c = (Id) fields.get('DocuSign_Envelope_Configuration__c');
+                version.DocuSign_Signer_Count__c = (Decimal) fields.get('DocuSign_Signer_Count__c');
+
                 insert version;
             }
         } catch (Exception e) {
@@ -442,7 +452,7 @@ public with sharing class DocGenController {
     public static List<Map<String, String>> searchUsersAndGroups(String searchTerm) {
         String key = '%' + searchTerm + '%';
         List<Map<String, String>> results = new List<Map<String, String>>();
-        
+
         for (User u : [SELECT Id, Name FROM User WHERE Name LIKE :key AND IsActive = TRUE WITH USER_MODE LIMIT 10]) {
              Map<String, String> row = new Map<String, String>();
              row.put('Id', u.Id);
@@ -451,7 +461,7 @@ public with sharing class DocGenController {
              row.put('Icon', 'standard:user');
              results.add(row);
         }
-        
+
         for (Group g : [SELECT Id, Name FROM Group WHERE Name LIKE :key AND Type = 'Regular' WITH USER_MODE LIMIT 10]) {
              Map<String, String> row = new Map<String, String>();
              row.put('Id', g.Id);
@@ -461,5 +471,96 @@ public with sharing class DocGenController {
              results.add(row);
         }
         return results;
+    }
+
+    @AuraEnabled(cacheable=true)
+    public static List<Map<String, String>> getDocuSignEnvelopeConfigs(String objectApiName) {
+        List<Map<String, String>> results = new List<Map<String, String>>();
+        try {
+            Schema.SObjectType envType = Schema.getGlobalDescribe().get('dfsle__EnvelopeConfiguration__c');
+            if (envType == null) return results;
+
+            Map<String, Schema.SObjectField> fieldMap = envType.getDescribe().fields.getMap();
+            Set<String> fieldsToQuery = new Set<String>{'Id', 'Name'};
+            String sourceField = null;
+            String signerCountField = null;
+
+            for (String f : fieldMap.keySet()) {
+                String lower = f.toLowerCase();
+                if (lower.contains('source') && lower.contains('object')) sourceField = f;
+                if (lower.contains('signer') || lower.contains('recipient')) signerCountField = f;
+            }
+            if (sourceField != null) fieldsToQuery.add(sourceField);
+            if (signerCountField != null) fieldsToQuery.add(signerCountField);
+
+            String soql = 'SELECT ' + String.join(new List<String>(fieldsToQuery), ', ') +
+                          ' FROM dfsle__EnvelopeConfiguration__c';
+            if (sourceField != null && String.isNotBlank(objectApiName)) {
+                soql += ' WHERE ' + sourceField + ' = \'' + String.escapeSingleQuotes(objectApiName) + '\'';
+            }
+            soql += ' WITH USER_MODE ORDER BY Name';
+
+            for (SObject rec : Database.query(soql)) {
+                Map<String, String> row = new Map<String, String>();
+                row.put('id', rec.Id);
+                row.put('name', (String)rec.get('Name'));
+                if (signerCountField != null) {
+                    Object val = rec.get(signerCountField);
+                    row.put('signerCount', val != null ? String.valueOf(val) : '1');
+                } else {
+                    row.put('signerCount', '1');
+                }
+                results.add(row);
+            }
+        } catch (Exception e) {
+            // Silently return empty list if managed package is not installed or query fails
+        }
+        return results;
+    }
+
+    @AuraEnabled(cacheable=true)
+    public static Map<String, Object> getDocuSignEnvelopeConfigDetails(Id configId) {
+        Map<String, Object> result = new Map<String, Object>{
+            'signerCount' => 1,
+            'defaultEmailSubject' => ''
+        };
+        if (configId == null) return result;
+
+        try {
+            Schema.SObjectType envType = Schema.getGlobalDescribe().get('dfsle__EnvelopeConfiguration__c');
+            if (envType == null) return result;
+
+            Map<String, Schema.SObjectField> fieldMap = envType.getDescribe().fields.getMap();
+            Set<String> fieldsToQuery = new Set<String>{'Id', 'Name'};
+            String signerCountField = null;
+            String subjectField = null;
+
+            for (String f : fieldMap.keySet()) {
+                String lower = f.toLowerCase();
+                if (lower.contains('signer') || lower.contains('recipient')) signerCountField = f;
+                if (lower.contains('email') && lower.contains('subject')) subjectField = f;
+                else if (lower.contains('subject') && subjectField == null) subjectField = f;
+            }
+            if (signerCountField != null) fieldsToQuery.add(signerCountField);
+            if (subjectField != null) fieldsToQuery.add(subjectField);
+
+            String soql = 'SELECT ' + String.join(new List<String>(fieldsToQuery), ', ') +
+                          ' FROM dfsle__EnvelopeConfiguration__c WHERE Id = :configId WITH USER_MODE LIMIT 1';
+            List<SObject> records = Database.query(soql);
+            if (records.isEmpty()) return result;
+
+            SObject rec = records[0];
+            if (signerCountField != null) {
+                Object val = rec.get(signerCountField);
+                result.put('signerCount', val != null ? Integer.valueOf(val) : 1);
+            }
+            if (subjectField != null) {
+                Object val = rec.get(subjectField);
+                result.put('defaultEmailSubject', val != null ? String.valueOf(val) : '');
+            }
+        } catch (Exception e) {
+            // Return defaults on any failure
+        }
+        return result;
     }
 }

@@ -6,6 +6,9 @@ public with sharing class DocGenDocuSignService {
         overrideDocuSignTemplateId = templateId;
     }
 
+    /**
+     * Data transfer object representing a DocuSign recipient.
+     */
     public class RecipientInfo {
         public Id contactId;
         public String name;
@@ -14,6 +17,15 @@ public with sharing class DocGenDocuSignService {
         public String role;
     }
 
+    /**
+     * Sends a document for DocuSign signature using a single recipient Contact.
+     *
+     * @param contentVersionId The ContentVersion ID of the document to send.
+     * @param sourceRecordId The Salesforce record to associate the envelope with.
+     * @param recipientContactId The Contact ID of the primary recipient.
+     * @param emailSubject Optional custom email subject; defaults to document title if blank.
+     * @return The DocuSign envelope ID string.
+     */
     public static String sendDocumentForSignature(
         Id contentVersionId,
         Id sourceRecordId,
@@ -24,24 +36,23 @@ public with sharing class DocGenDocuSignService {
         if (recipientContactId != null) {
             list.add(new RecipientInfo(contactId = recipientContactId, routingOrder = 1, role = 'Signer 1'));
         }
-        return sendDocumentForSignature(contentVersionId, sourceRecordId, list, emailSubject, null);
+        return sendDocumentForSignature(contentVersionId, sourceRecordId, list, emailSubject);
     }
 
+    /**
+     * Sends a document for DocuSign signature using multiple recipients.
+     *
+     * @param contentVersionId The ContentVersion ID of the document to send.
+     * @param sourceRecordId The Salesforce record to associate the envelope with.
+     * @param recipients Ordered list of RecipientInfo objects defining signers.
+     * @param emailSubject Optional custom email subject; defaults to document title if blank.
+     * @return The DocuSign envelope ID string.
+     */
     public static String sendDocumentForSignature(
         Id contentVersionId,
         Id sourceRecordId,
         List<RecipientInfo> recipients,
         String emailSubject
-    ) {
-        return sendDocumentForSignature(contentVersionId, sourceRecordId, recipients, emailSubject, null);
-    }
-
-    public static String sendDocumentForSignature(
-        Id contentVersionId,
-        Id sourceRecordId,
-        List<RecipientInfo> recipients,
-        String emailSubject,
-        Id envelopeConfigurationId
     ) {
         if (contentVersionId == null || sourceRecordId == null) {
             throw new DocGenException('ContentVersion ID and Source Record ID are required.');
@@ -108,13 +119,7 @@ public with sharing class DocGenDocuSignService {
             idx++;
         }
 
-        String subject = emailSubject;
-        if (String.isBlank(subject) && envelopeConfigurationId != null) {
-            subject = resolveDefaultEmailSubject(envelopeConfigurationId);
-        }
-        if (String.isBlank(subject)) {
-            subject = 'Please review and sign: ' + cv.Title;
-        }
+        String subject = String.isNotBlank(emailSubject) ? emailSubject : 'Please review and sign: ' + cv.Title;
 
         dfsle.Envelope envelope = dfsle.EnvelopeService.getEmptyEnvelope(new dfsle.Entity(sourceRecordId))
             .withDocuments(new List<dfsle.Document>{ doc })
@@ -134,32 +139,6 @@ public with sharing class DocGenDocuSignService {
             return sentEnvelope.id;
         } catch (Exception e) {
             throw new DocGenException('DocuSign send failed: ' + e.getMessage());
-        }
-    }
-
-    private static String resolveDefaultEmailSubject(Id envelopeConfigurationId) {
-        try {
-            Schema.SObjectType envType = Schema.getGlobalDescribe().get('dfsle__EnvelopeConfiguration__c');
-            if (envType == null) return null;
-            Map<String, Schema.SObjectField> fieldMap = envType.getDescribe().fields.getMap();
-            String subjectField = null;
-            for (String f : fieldMap.keySet()) {
-                String lower = f.toLowerCase();
-                if (lower.contains('email') && lower.contains('subject')) {
-                    subjectField = f;
-                    break;
-                } else if (lower.contains('subject') && subjectField == null) {
-                    subjectField = f;
-                }
-            }
-            if (subjectField == null) return null;
-            String soql = 'SELECT ' + subjectField + ' FROM dfsle__EnvelopeConfiguration__c WHERE Id = :envelopeConfigurationId WITH USER_MODE LIMIT 1';
-            List<SObject> records = Database.query(soql);
-            if (records.isEmpty()) return null;
-            Object val = records[0].get(subjectField);
-            return val != null ? String.valueOf(val) : null;
-        } catch (Exception e) {
-            return null;
         }
     }
 

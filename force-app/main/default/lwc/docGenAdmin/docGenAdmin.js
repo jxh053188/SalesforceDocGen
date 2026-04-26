@@ -124,7 +124,8 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     editTemplateEnvelopeConfig = '';
     editTemplateSignerCount = 1;
 
-    @track envelopeConfigOptions = [];
+    @track newEnvelopeConfigOptions = [];
+    @track editEnvelopeConfigOptions = [];
 
     @track currentFileId;
     @track uploadedFileName = '';
@@ -153,24 +154,24 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     @wire(getDocuSignEnvelopeConfigs, { objectApiName: '$newTemplateObject' })
     wiredEnvelopeConfigsNew({ error, data }) {
         if (data) {
-            this.envelopeConfigOptions = [
+            this.newEnvelopeConfigOptions = [
                 { label: '-- None --', value: '' },
                 ...data.map(c => ({ label: c.name, value: c.id, signerCount: c.signerCount }))
             ];
         } else if (error) {
-            this.envelopeConfigOptions = [{ label: '-- None --', value: '' }];
+            this.newEnvelopeConfigOptions = [{ label: '-- None --', value: '' }];
         }
     }
 
     @wire(getDocuSignEnvelopeConfigs, { objectApiName: '$editTemplateObject' })
     wiredEnvelopeConfigsEdit({ error, data }) {
         if (data) {
-            this.envelopeConfigOptions = [
+            this.editEnvelopeConfigOptions = [
                 { label: '-- None --', value: '' },
                 ...data.map(c => ({ label: c.name, value: c.id, signerCount: c.signerCount }))
             ];
         } else if (error) {
-            this.envelopeConfigOptions = [{ label: '-- None --', value: '' }];
+            this.editEnvelopeConfigOptions = [{ label: '-- None --', value: '' }];
         }
     }
 
@@ -292,7 +293,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     handleDescChange(event) { this.newTemplateDesc = event.detail.value; }
     handleEnvelopeConfigChange(event) {
         this.newTemplateEnvelopeConfig = event.detail.value;
-        const selected = this.envelopeConfigOptions.find(o => o.value === this.newTemplateEnvelopeConfig);
+        const selected = this.newEnvelopeConfigOptions.find(o => o.value === this.newTemplateEnvelopeConfig);
         this.newTemplateSignerCount = selected && selected.signerCount ? parseInt(selected.signerCount, 10) : 1;
     }
     handleSignerCountChange(event) {
@@ -313,7 +314,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     handleEditDescChange(event) { this.editTemplateDesc = event.detail.value; }
     handleEditEnvelopeConfigChange(event) {
         this.editTemplateEnvelopeConfig = event.detail.value;
-        const selected = this.envelopeConfigOptions.find(o => o.value === this.editTemplateEnvelopeConfig);
+        const selected = this.editEnvelopeConfigOptions.find(o => o.value === this.editTemplateEnvelopeConfig);
         this.editTemplateSignerCount = selected && selected.signerCount ? parseInt(selected.signerCount, 10) : 1;
     }
     handleEditSignerCountChange(event) {
@@ -756,10 +757,6 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             try {
                 const rawData = JSON.parse(JSON.stringify(result.data));
                 recordData = flattenData(rawData);
-                console.log('[docGenAdmin] Flattened recordData keys:', Object.keys(recordData));
-                if (recordData.Opportunities) {
-                    console.log('[docGenAdmin] Opportunities data:', JSON.stringify(recordData.Opportunities).substring(0, 500));
-                }
             } catch (jsonErr) {
                 throw new Error('Data sanitization failed: ' + jsonErr.message);
             }
@@ -788,7 +785,6 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                         const pdfBlob = await orchestratePdfGeneration(iframe, messageData);
                         await this._handleTestPdfBlobResult(pdfBlob, baseName, true);
                     } catch (pdfErr) {
-                        console.error('[docGenAdmin] PDF preview failed:', pdfErr);
                         this.showToast('PDF Error', pdfErr.message || 'Failed to generate PDF preview.', 'error');
                     }
                 } else if (this.editTemplateOutputFormat === 'PDF') {
@@ -838,7 +834,6 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                     const pdfBlob = await orchestratePdfGeneration(iframe, messageData);
                     await this._handleTestPdfBlobResult(pdfBlob, baseName, true);
                 } catch (pdfErr) {
-                    console.error('[docGenAdmin] PDF generation failed:', pdfErr);
                     this.showToast('PDF Error', pdfErr.message || 'Failed to generate PDF preview.', 'error');
                 }
                 return;

@@ -55,13 +55,22 @@ public with sharing class DocGenDocuSignController {
         }
     }
 
+    /**
+     * Generates a document from the specified template and sends it for DocuSign signature
+     * with multiple recipients.
+     *
+     * @param templateId The DocGen template ID to use for document generation.
+     * @param recordId The source record ID to generate the document for.
+     * @param recipientInputs List of maps containing contactId for each recipient.
+     * @param emailSubject Optional custom email subject for the DocuSign envelope.
+     * @return Map containing contentDocumentId and envelopeId.
+     */
     @AuraEnabled
     public static Map<String, String> generateAndSendWithRecipients(
         Id templateId,
         Id recordId,
         List<Map<String, String>> recipientInputs,
-        String emailSubject,
-        Id envelopeConfigurationId
+        String emailSubject
     ) {
         try {
             Id contentDocId = DocGenService.generateDocument(templateId, recordId, true);
@@ -90,8 +99,7 @@ public with sharing class DocGenDocuSignController {
                 cvs[0].Id,
                 recordId,
                 recipients,
-                emailSubject,
-                envelopeConfigurationId
+                emailSubject
             );
 
             return new Map<String, String>{

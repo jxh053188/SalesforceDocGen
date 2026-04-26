@@ -129,7 +129,6 @@ export default class DocGenRunner extends LightningElement {
                         const pdfBlob = await orchestratePdfGeneration(iframe, messageData);
                         await this._handlePdfBlobResult(pdfBlob, baseName, true);
                     } catch (pdfErr) {
-                        console.error('[docGenRunner] PDF preview failed:', pdfErr);
                         throw pdfErr;
                     }
                 }
@@ -155,7 +154,6 @@ export default class DocGenRunner extends LightningElement {
                     const pdfBlob = await orchestratePdfGeneration(iframe, messageData);
                     await this._handlePdfBlobResult(pdfBlob, baseName, true);
                 } catch (pdfErr) {
-                    console.error('[docGenRunner] PDF preview failed:', pdfErr);
                     throw pdfErr;
                 }
                 return;

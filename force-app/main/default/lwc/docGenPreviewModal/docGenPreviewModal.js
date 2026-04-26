@@ -116,6 +116,7 @@ export default class DocGenPreviewModal extends LightningModal {
 
     handleRecipientChange(event) {
         const index = parseInt(event.target.dataset.index, 10);
+        this.selectedContactIds = [...this.selectedContactIds];
         this.selectedContactIds[index] = event.detail.value;
     }
 
@@ -139,8 +140,7 @@ export default class DocGenPreviewModal extends LightningModal {
                 templateId: this.templateId,
                 recordId: this.recordId,
                 recipientInputs: recipientInputs,
-                emailSubject: this.emailSubject,
-                envelopeConfigurationId: null
+                emailSubject: this.emailSubject
             });
 
             this.showToast('Success', 'DocuSign envelope sent. ID: ' + result.envelopeId, 'success');

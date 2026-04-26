@@ -55,7 +55,8 @@ public with sharing class DocGenController {
             cv.IsMajorVersion = true;
             insert cv;
 
-            Id contentDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id WITH SYSTEM_MODE].ContentDocumentId;
+            // Record was just inserted in the same transaction; running user retains access.
+            Id contentDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id WITH USER_MODE].ContentDocumentId;
 
             ContentDocumentLink cdl = new ContentDocumentLink();
             cdl.ContentDocumentId = contentDocId;
@@ -473,6 +474,12 @@ public with sharing class DocGenController {
         return results;
     }
 
+    /**
+     * Retrieves available DocuSign Envelope Configurations for a given object type.
+     *
+     * @param objectApiName The Salesforce object API name to filter configurations by.
+     * @return List of maps containing id, name, and signerCount for each configuration.
+     */
     @AuraEnabled(cacheable=true)
     public static List<Map<String, String>> getDocuSignEnvelopeConfigs(String objectApiName) {
         List<Map<String, String>> results = new List<Map<String, String>>();
@@ -518,49 +525,4 @@ public with sharing class DocGenController {
         return results;
     }
 
-    @AuraEnabled(cacheable=true)
-    public static Map<String, Object> getDocuSignEnvelopeConfigDetails(Id configId) {
-        Map<String, Object> result = new Map<String, Object>{
-            'signerCount' => 1,
-            'defaultEmailSubject' => ''
-        };
-        if (configId == null) return result;
-
-        try {
-            Schema.SObjectType envType = Schema.getGlobalDescribe().get('dfsle__EnvelopeConfiguration__c');
-            if (envType == null) return result;
-
-            Map<String, Schema.SObjectField> fieldMap = envType.getDescribe().fields.getMap();
-            Set<String> fieldsToQuery = new Set<String>{'Id', 'Name'};
-            String signerCountField = null;
-            String subjectField = null;
-
-            for (String f : fieldMap.keySet()) {
-                String lower = f.toLowerCase();
-                if (lower.contains('signer') || lower.contains('recipient')) signerCountField = f;
-                if (lower.contains('email') && lower.contains('subject')) subjectField = f;
-                else if (lower.contains('subject') && subjectField == null) subjectField = f;
-            }
-            if (signerCountField != null) fieldsToQuery.add(signerCountField);
-            if (subjectField != null) fieldsToQuery.add(subjectField);
-
-            String soql = 'SELECT ' + String.join(new List<String>(fieldsToQuery), ', ') +
-                          ' FROM dfsle__EnvelopeConfiguration__c WHERE Id = :configId WITH USER_MODE LIMIT 1';
-            List<SObject> records = Database.query(soql);
-            if (records.isEmpty()) return result;
-
-            SObject rec = records[0];
-            if (signerCountField != null) {
-                Object val = rec.get(signerCountField);
-                result.put('signerCount', val != null ? Integer.valueOf(val) : 1);
-            }
-            if (subjectField != null) {
-                Object val = rec.get(subjectField);
-                result.put('defaultEmailSubject', val != null ? String.valueOf(val) : '');
-            }
-        } catch (Exception e) {
-            // Return defaults on any failure
-        }
-        return result;
-    }
 }

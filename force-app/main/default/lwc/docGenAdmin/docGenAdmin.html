@@ -48,6 +48,14 @@
                                     <lightning-combobox label="Output Format" value={newTemplateOutputFormat}
                                         options={outputFormatOptions} onchange={handleOutputFormatChange}
                                         class="slds-m-top_small" required></lightning-combobox>
+                                    <lightning-combobox label="DocuSign Envelope Configuration"
+                                        value={newTemplateEnvelopeConfig} options={envelopeConfigOptions}
+                                        onchange={handleEnvelopeConfigChange} class="slds-m-top_small">
+                                    </lightning-combobox>
+                                    <lightning-input type="number" label="DocuSign Signer Count"
+                                        value={newTemplateSignerCount} min="1" max="10"
+                                        onchange={handleSignerCountChange} class="slds-m-top_small">
+                                    </lightning-input>
                                     <lightning-textarea label="Description" value={newTemplateDesc}
                                         onchange={handleDescChange} class="slds-m-top_small"></lightning-textarea>
                                 </div>
@@ -153,6 +161,14 @@
                                         class="slds-m-top_small" required></lightning-combobox>
                                     <lightning-input label="Base Object API Name" value={editTemplateObject} readonly
                                         class="slds-m-top_small"></lightning-input>
+                                    <lightning-combobox label="DocuSign Envelope Configuration"
+                                        value={editTemplateEnvelopeConfig} options={envelopeConfigOptions}
+                                        onchange={handleEditEnvelopeConfigChange} class="slds-m-top_small">
+                                    </lightning-combobox>
+                                    <lightning-input type="number" label="DocuSign Signer Count"
+                                        value={editTemplateSignerCount} min="1" max="10"
+                                        onchange={handleEditSignerCountChange} class="slds-m-top_small">
+                                    </lightning-input>
 
                                     <c-doc-gen-title-editor value={editTemplateTitleFormat}
                                         query-config={editTemplateQuery} onchange={handleTitleFormatChange}

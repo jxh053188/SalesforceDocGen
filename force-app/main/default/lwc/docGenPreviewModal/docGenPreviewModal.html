@@ -14,10 +14,44 @@
                 </div>
             </template>
         </div>
+
+        <template if:true={showSendForm}>
+            <div class="slds-box slds-theme_shade slds-m-top_medium">
+                <lightning-input type="text" label="Email Subject" value={emailSubject}
+                    onchange={handleEmailSubjectChange} class="slds-m-bottom_small">
+                </lightning-input>
+                <template for:each={signerPickers} for:item="picker">
+                    <lightning-combobox key={picker.index} label={picker.label} value={picker.value}
+                        options={contactOptions} data-index={picker.index} onchange={handleRecipientChange}
+                        class="slds-m-bottom_small">
+                    </lightning-combobox>
+                </template>
+                <lightning-button variant="brand" label="Confirm Send" onclick={handleConfirmSend}
+                    disabled={isSending}>
+                </lightning-button>
+                <template if:true={isSending}>
+                    <lightning-spinner alternative-text="Sending" size="small" class="slds-m-left_small">
+                    </lightning-spinner>
+                </template>
+            </div>
+        </template>
     </lightning-modal-body>
     <lightning-modal-footer>
         <lightning-button label="Close" onclick={handleClose} class="slds-m-right_x-small"></lightning-button>
-        <lightning-button label="Download" variant="brand" onclick={handleDownload}
-            disabled={isDownloadDisabled}></lightning-button>
+        <template if:true={allowDownload}>
+            <lightning-button label="Download" variant="neutral" onclick={handleDownload}
+                disabled={isDownloadDisabled} class="slds-m-right_x-small">
+            </lightning-button>
+        </template>
+        <template if:true={allowSave}>
+            <lightning-button label="Save to Record" variant="brand-outline" onclick={handleSaveToRecord}
+                disabled={isSaving} class="slds-m-right_x-small">
+            </lightning-button>
+        </template>
+        <template if:true={allowDocuSign}>
+            <lightning-button label="Send with DocuSign" variant="brand" onclick={handleSendDocuSign}
+                disabled={isSending}>
+            </lightning-button>
+        </template>
     </lightning-modal-footer>
 </template>

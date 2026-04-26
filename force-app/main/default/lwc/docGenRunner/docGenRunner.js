@@ -3,13 +3,12 @@ import { loadScript } from 'lightning/platformResourceLoader';
 import { ShowToastEvent } from 'lightning/platformShowToastEvent';
 import getTemplatesForObject from '@salesforce/apex/DocGenController.getTemplatesForObject';
 import generateDocumentData from '@salesforce/apex/DocGenController.generateDocumentData';
-import saveGeneratedDocument from '@salesforce/apex/DocGenController.saveGeneratedDocument';
 import PIZZIP_JS from '@salesforce/resourceUrl/pizzip';
 import DOCXTEMPLATER_JS from '@salesforce/resourceUrl/docxtemplater';
 import FILESAVER_JS from '@salesforce/resourceUrl/filesaver';
 import HANDLEBARS_JS from '@salesforce/resourceUrl/handlebars';
 import DocGenPreviewModal from 'c/docGenPreviewModal';
-import { flattenData, renderDocxTemplate, renderHtmlTemplate, generateBlobFromDocx, orchestratePdfGeneration, downloadBlob } from 'c/docGenEngine';
+import { flattenData, renderDocxTemplate, renderHtmlTemplate, generateBlobFromDocx, orchestratePdfGeneration } from 'c/docGenEngine';
 
 export default class DocGenRunner extends LightningElement {
     @api recordId;
@@ -17,25 +16,22 @@ export default class DocGenRunner extends LightningElement {
 
     @track templateOptions = [];
     @track selectedTemplateId;
-    @track outputMode = 'download';
     @track templateOutputFormat = 'Document';
+    @track selectedTemplateHasEnvelopeConfig = false;
+    @track selectedTemplateSignerCount = 1;
 
     isLoading = false;
     error;
     librariesLoaded = false;
     _librariesPromise;
-    _templateData = []; // Store raw template metadata
+    _templateData = [];
 
     get engineUrl() {
         return '/apex/DocGenPDFEngine';
     }
 
-    get outputOptions() {
-        const formatLabel = this.templateOutputFormat || 'Document';
-        return [
-            { label: `Download ${formatLabel}`, value: 'download' },
-            { label: `Save to Record (${formatLabel})`, value: 'save' }
-        ];
+    get isPreviewDisabled() {
+        return !this.selectedTemplateId || this.isLoading;
     }
 
     @wire(getTemplatesForObject, { objectApiName: '$objectApiName' })
@@ -76,23 +72,12 @@ export default class DocGenRunner extends LightningElement {
         this.selectedTemplateId = event.detail.value;
         this.error = null;
 
-        // Update the UI labels immediately based on selected template
         const selected = this._templateData.find(t => t.Id === this.selectedTemplateId);
         if (selected) {
             this.templateOutputFormat = selected.Output_Format__c || 'Document';
+            this.selectedTemplateHasEnvelopeConfig = !!selected.DocuSign_Envelope_Configuration__c;
+            this.selectedTemplateSignerCount = selected.DocuSign_Signer_Count__c || 1;
         }
-    }
-
-    handleOutputModeChange(event) {
-        this.outputMode = event.detail.value;
-    }
-
-    get isGenerateDisabled() {
-        return !this.selectedTemplateId || this.isLoading;
-    }
-
-    async generateDocument() {
-        await this._runGenerationFlow(false);
     }
 
     async previewDocument() {
@@ -104,14 +89,12 @@ export default class DocGenRunner extends LightningElement {
         this.error = null;
 
         try {
-            // 0. Ensure Libraries are loaded
             if (this._librariesPromise) {
                 await this._librariesPromise;
             } else {
                 throw new Error('Libraries failed to initialize.');
             }
 
-            // 1. Get Data and Template Content
             const result = await generateDocumentData({
                 templateId: this.selectedTemplateId,
                 recordId: this.recordId
@@ -140,8 +123,7 @@ export default class DocGenRunner extends LightningElement {
                     const messageData = {
                         type: 'generate',
                         html: renderedHtml,
-                        fileName: baseName,
-                        mode: this.outputMode
+                        fileName: baseName
                     };
                     try {
                         const pdfBlob = await orchestratePdfGeneration(iframe, messageData);
@@ -149,27 +131,6 @@ export default class DocGenRunner extends LightningElement {
                     } catch (pdfErr) {
                         console.error('[docGenRunner] PDF preview failed:', pdfErr);
                         throw pdfErr;
-                    }
-                } else if (this.templateOutputFormat === 'PDF') {
-                    this.showToast('Info', 'Generating PDF...', 'info');
-                    const iframe = this.template.querySelector('iframe');
-                    if (!iframe) throw new Error('PDF Engine iframe not found.');
-                    const messageData = {
-                        type: 'generate',
-                        html: renderedHtml,
-                        fileName: baseName,
-                        mode: this.outputMode
-                    };
-                    const pdfBlob = await orchestratePdfGeneration(iframe, messageData);
-                    await this._handlePdfBlobResult(pdfBlob, baseName, false);
-                } else {
-                    const blob = new Blob([renderedHtml], { type: 'application/octet-stream' });
-                    if (this.outputMode === 'save') {
-                        await this.saveToSalesforce(baseName, blob, 'html');
-                    } else {
-                        downloadBlob(blob, baseName + '.html');
-                        this.showToast('Success', 'HTML document downloaded.', 'success');
-                        this.isLoading = false;
                     }
                 }
                 return;
@@ -188,8 +149,7 @@ export default class DocGenRunner extends LightningElement {
                 const messageData = {
                     type: 'generate',
                     blob: pdfGenResult.blob,
-                    fileName: baseName,
-                    mode: this.outputMode
+                    fileName: baseName
                 };
                 try {
                     const pdfBlob = await orchestratePdfGeneration(iframe, messageData);
@@ -199,38 +159,6 @@ export default class DocGenRunner extends LightningElement {
                     throw pdfErr;
                 }
                 return;
-            }
-
-            const { blob, extension, isPDF, isPPT } = generateBlobFromDocx(doc, templateType, this.templateOutputFormat);
-
-            if (isPPT) {
-                if (this.outputMode === 'save') {
-                    await this.saveToSalesforce(baseName, blob, 'pptx');
-                } else {
-                    downloadBlob(blob, baseName + '.pptx');
-                    this.showToast('Success', 'PowerPoint downloaded.', 'success');
-                    this.isLoading = false;
-                }
-            } else if (!isPDF) {
-                if (this.outputMode === 'save') {
-                    await this.saveToSalesforce(baseName, blob, 'docx');
-                } else {
-                    downloadBlob(blob, baseName + '.docx');
-                    this.showToast('Success', 'Word document downloaded.', 'success');
-                    this.isLoading = false;
-                }
-            } else {
-                this.showToast('Info', 'Generating PDF...', 'info');
-                const iframe = this.template.querySelector('iframe');
-                if (!iframe) throw new Error('PDF Engine iframe not found.');
-                const messageData = {
-                    type: 'generate',
-                    blob: blob,
-                    fileName: baseName,
-                    mode: this.outputMode
-                };
-                const pdfBlob = await orchestratePdfGeneration(iframe, messageData);
-                await this._handlePdfBlobResult(pdfBlob, baseName, false);
             }
 
         } catch (e) {
@@ -267,94 +195,15 @@ export default class DocGenRunner extends LightningElement {
             await DocGenPreviewModal.open({
                 size: 'large',
                 pdfBlob: pdfBlob,
-                fileName: baseName + '.pdf'
-            });
-        } else if (this.outputMode === 'save') {
-            await this.saveToSalesforce(baseName, pdfBlob, 'pdf');
-        } else {
-            downloadBlob(pdfBlob, baseName + '.pdf');
-            this.showToast('Success', 'Document Generated successfully.', 'success');
-            this.isLoading = false;
-        }
-    }
-
-    connectedCallback() {
-        window.addEventListener('message', this.handleMessage);
-    }
-
-    disconnectedCallback() {
-        window.removeEventListener('message', this.handleMessage);
-    }
-
-    handleMessage = async (event) => {
-        // The PDF engine runs on a different Salesforce subdomain (Visualforce).
-        // We verify the payload structure instead of the origin.
-        if (!event.data) return;
-        if (event.data.type !== 'docgen_success' && event.data.type !== 'docgen_error') return;
-
-        if (event.data.type === 'docgen_success') {
-            if (this.outputMode === 'save' && event.data.blob) {
-                await this.saveToSalesforce(event.data.fileName, event.data.blob, 'pdf');
-            } else {
-                this.showToast('Success', 'Document Generated successfully.', 'success');
-                this.isLoading = false;
-            }
-        } else if (event.data.type === 'docgen_error') {
-            this.error = 'PDF Engine Error: ' + event.data.message;
-            this.isLoading = false;
-        }
-    }
-
-    async saveToSalesforce(fileName, blob, extension) {
-        try {
-            this.showToast('Info', 'Saving to Record...', 'info');
-
-            const base64 = await this.blobToBase64(blob);
-            if (!base64) throw new Error('Failed to convert file to binary data.');
-
-            await saveGeneratedDocument({
+                fileName: baseName + '.pdf',
                 recordId: this.recordId,
-                fileName: fileName,
-                base64Data: base64,
-                extension: extension
+                templateId: this.selectedTemplateId,
+                allowDocuSign: this.selectedTemplateHasEnvelopeConfig,
+                signerCount: this.selectedTemplateSignerCount || 1,
+                allowSave: true,
+                allowDownload: true
             });
-            this.showToast('Success', `${extension.toUpperCase()} saved to record.`, 'success');
-        } catch (e) {
-            this.error = 'Save Error: ' + (e.body ? e.body.message : (e.message || e));
-            this.showToast('Error', 'Save failed. Check error message.', 'error');
-        } finally {
-            this.isLoading = false;
         }
-    }
-
-    blobToBase64(blob) {
-        return new Promise((resolve, reject) => {
-            if (!blob) {
-                reject(new Error('Input blob is null or undefined.'));
-                return;
-            }
-            const reader = new FileReader();
-            reader.onloadend = () => {
-                const base64String = reader.result.split(',')[1];
-                resolve(base64String);
-            };
-            reader.onerror = (e) => {
-                reject(new Error('Error reading file data.'));
-            };
-
-            if (blob instanceof ArrayBuffer) {
-                reader.readAsDataURL(new Blob([blob]));
-            } else if (blob instanceof Blob) {
-                reader.readAsDataURL(blob);
-            } else {
-                // Try treating it as a buffer if it's an TypedArray
-                try {
-                    reader.readAsDataURL(new Blob([blob]));
-                } catch (err) {
-                    reject(new Error('Input is not a valid Blob or ArrayBuffer.'));
-                }
-            }
-        });
     }
 
     showToast(title, message, variant) {

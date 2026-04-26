@@ -18,19 +18,9 @@
                     class="slds-m-bottom_medium">
                 </lightning-combobox>
 
-                <div class="slds-m-bottom_medium">
-                    <lightning-radio-group name="outputMode" label="Action" options={outputOptions} value={outputMode}
-                        onchange={handleOutputModeChange} type="button">
-                    </lightning-radio-group>
-                </div>
-
                 <div class="slds-m-top_medium">
-                    <lightning-button variant="brand" label="Generate Document" onclick={generateDocument}
-                        disabled={isGenerateDisabled} class="slds-m-right_small">
-                    </lightning-button>
-
                     <lightning-button variant="neutral" label="Preview Document" icon-name="utility:preview"
-                        onclick={previewDocument} disabled={isGenerateDisabled}>
+                        onclick={previewDocument} disabled={isPreviewDisabled}>
                     </lightning-button>
                 </div>
             </template>

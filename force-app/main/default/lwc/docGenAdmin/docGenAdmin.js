@@ -11,6 +11,7 @@ import deleteTemplate from '@salesforce/apex/DocGenController.deleteTemplate';
 import saveTemplate from '@salesforce/apex/DocGenController.saveTemplate';
 import getTemplateVersions from '@salesforce/apex/DocGenController.getTemplateVersions';
 import generateDocumentData from '@salesforce/apex/DocGenController.generateDocumentData';
+import getDocuSignEnvelopeConfigs from '@salesforce/apex/DocGenController.getDocuSignEnvelopeConfigs';
 // import createSampleData ... removed
 import activateVersion from '@salesforce/apex/DocGenController.activateVersion';
 
@@ -24,6 +25,8 @@ import BASE_OBJECT_FIELD from '@salesforce/schema/DocGen_Template__c.Base_Object
 import QUERY_CONFIG_FIELD from '@salesforce/schema/DocGen_Template__c.Query_Config__c';
 import QUERY_METADATA_FIELD from '@salesforce/schema/DocGen_Template__c.Query_Metadata__c';
 import DESC_FIELD from '@salesforce/schema/DocGen_Template__c.Description__c';
+import DOCUSIGN_ENV_FIELD from '@salesforce/schema/DocGen_Template__c.DocuSign_Envelope_Configuration__c';
+import DOCUSIGN_SIGNER_COUNT_FIELD from '@salesforce/schema/DocGen_Template__c.DocuSign_Signer_Count__c';
 
 // Static Resources
 import PIZZIP_JS from '@salesforce/resourceUrl/pizzip';
@@ -99,6 +102,8 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     newTemplateDesc = '';
     newTemplateQuery = '';
     newTemplateMetadata = '';
+    newTemplateEnvelopeConfig = '';
+    newTemplateSignerCount = 1;
     isCreating = true;
     createdTemplateId;
 
@@ -115,7 +120,11 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     editTemplateQuery;
     editTemplateMetadata;
     editTemplateTestRecordId;
-    editTemplateTitleFormat; // New Field
+    editTemplateTitleFormat;
+    editTemplateEnvelopeConfig = '';
+    editTemplateSignerCount = 1;
+
+    @track envelopeConfigOptions = [];
 
     @track currentFileId;
     @track uploadedFileName = '';
@@ -138,6 +147,30 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             this.templates = result.data;
         } else if (result.error) {
             this.showToast('Error', 'Error loading templates', 'error');
+        }
+    }
+
+    @wire(getDocuSignEnvelopeConfigs, { objectApiName: '$newTemplateObject' })
+    wiredEnvelopeConfigsNew({ error, data }) {
+        if (data) {
+            this.envelopeConfigOptions = [
+                { label: '-- None --', value: '' },
+                ...data.map(c => ({ label: c.name, value: c.id, signerCount: c.signerCount }))
+            ];
+        } else if (error) {
+            this.envelopeConfigOptions = [{ label: '-- None --', value: '' }];
+        }
+    }
+
+    @wire(getDocuSignEnvelopeConfigs, { objectApiName: '$editTemplateObject' })
+    wiredEnvelopeConfigsEdit({ error, data }) {
+        if (data) {
+            this.envelopeConfigOptions = [
+                { label: '-- None --', value: '' },
+                ...data.map(c => ({ label: c.name, value: c.id, signerCount: c.signerCount }))
+            ];
+        } else if (error) {
+            this.envelopeConfigOptions = [{ label: '-- None --', value: '' }];
         }
     }
 
@@ -236,6 +269,8 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         this.newTemplateDesc = '';
         this.newTemplateQuery = '';
         this.newTemplateMetadata = '';
+        this.newTemplateEnvelopeConfig = '';
+        this.newTemplateSignerCount = 1;
         this.isCreating = true;
         this.createdTemplateId = null;
     }
@@ -255,6 +290,14 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     handleTypeChange(event) { this.newTemplateType = event.detail.value; }
     handleOutputFormatChange(event) { this.newTemplateOutputFormat = event.detail.value; }
     handleDescChange(event) { this.newTemplateDesc = event.detail.value; }
+    handleEnvelopeConfigChange(event) {
+        this.newTemplateEnvelopeConfig = event.detail.value;
+        const selected = this.envelopeConfigOptions.find(o => o.value === this.newTemplateEnvelopeConfig);
+        this.newTemplateSignerCount = selected && selected.signerCount ? parseInt(selected.signerCount, 10) : 1;
+    }
+    handleSignerCountChange(event) {
+        this.newTemplateSignerCount = parseInt(event.detail.value, 10) || 1;
+    }
 
     handleConfigChange(event) {
         this.newTemplateObject = event.detail.objectName;
@@ -268,6 +311,14 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     handleEditTypeChange(event) { this.editTemplateType = event.detail.value; }
     handleEditOutputFormatChange(event) { this.editTemplateOutputFormat = event.detail.value; }
     handleEditDescChange(event) { this.editTemplateDesc = event.detail.value; }
+    handleEditEnvelopeConfigChange(event) {
+        this.editTemplateEnvelopeConfig = event.detail.value;
+        const selected = this.envelopeConfigOptions.find(o => o.value === this.editTemplateEnvelopeConfig);
+        this.editTemplateSignerCount = selected && selected.signerCount ? parseInt(selected.signerCount, 10) : 1;
+    }
+    handleEditSignerCountChange(event) {
+        this.editTemplateSignerCount = parseInt(event.detail.value, 10) || 1;
+    }
 
     handleManualQueryToggle(event) {
         this.isManualQuery = event.target.checked;
@@ -352,6 +403,8 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         fields[QUERY_CONFIG_FIELD.fieldApiName] = this.newTemplateQuery;
         fields[QUERY_METADATA_FIELD.fieldApiName] = this.newTemplateMetadata;
         fields[DESC_FIELD.fieldApiName] = this.newTemplateDesc;
+        fields[DOCUSIGN_ENV_FIELD.fieldApiName] = this.newTemplateEnvelopeConfig || null;
+        fields[DOCUSIGN_SIGNER_COUNT_FIELD.fieldApiName] = this.newTemplateSignerCount || 1;
 
         try {
             const record = await createRecord({ apiName: DOCGEN_TEMPLATE_OBJECT.objectApiName, fields });
@@ -371,6 +424,8 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 Query_Metadata__c: this.newTemplateMetadata,
                 Test_Record_Id__c: null,
                 Document_Title_Format__c: null,
+                DocuSign_Envelope_Configuration__c: this.newTemplateEnvelopeConfig || null,
+                DocuSign_Signer_Count__c: this.newTemplateSignerCount || 1,
                 ContentDocumentLinks: []
             };
 
@@ -432,6 +487,8 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             this.editTemplateMetadata = row.Query_Metadata__c;
             this.editTemplateTestRecordId = row.Test_Record_Id__c;
             this.editTemplateTitleFormat = row.Document_Title_Format__c;
+            this.editTemplateEnvelopeConfig = row.DocuSign_Envelope_Configuration__c || '';
+            this.editTemplateSignerCount = row.DocuSign_Signer_Count__c || 1;
 
             // Extract ContentDocumentId safely
             let cdLinks = [];
@@ -604,7 +661,9 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             Query_Config__c: queryToSave,
             Query_Metadata__c: this.getEditModeQueryMetadata(),
             Test_Record_Id__c: this.editTemplateTestRecordId,
-            Document_Title_Format__c: this.editTemplateTitleFormat
+            Document_Title_Format__c: this.editTemplateTitleFormat,
+            DocuSign_Envelope_Configuration__c: this.editTemplateEnvelopeConfig || null,
+            DocuSign_Signer_Count__c: this.editTemplateSignerCount || 1
         };
 
         try {
@@ -635,7 +694,9 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             Query_Config__c: queryToSave,
             Query_Metadata__c: this.getEditModeQueryMetadata(),
             Test_Record_Id__c: this.editTemplateTestRecordId,
-            Document_Title_Format__c: this.editTemplateTitleFormat
+            Document_Title_Format__c: this.editTemplateTitleFormat,
+            DocuSign_Envelope_Configuration__c: this.editTemplateEnvelopeConfig || null,
+            DocuSign_Signer_Count__c: this.editTemplateSignerCount || 1
         };
 
         const createVersion = true;

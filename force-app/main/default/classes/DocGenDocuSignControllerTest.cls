@@ -234,4 +234,105 @@ private class DocGenDocuSignControllerTest {
         ));
         return writer.getArchive();
     }
+
+    @isTest
+    static void testGenerateAndSendWithRecipients_Success() {
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+        Account acc = new Account(Name = 'Test Account');
+        insert acc;
+
+        Contact con1 = new Contact(FirstName = 'Test1', LastName = 'User1', Email = 'test1@example.com', AccountId = acc.Id);
+        Contact con2 = new Contact(FirstName = 'Test2', LastName = 'User2', Email = 'test2@example.com', AccountId = acc.Id);
+        insert new List<Contact>{ con1, con2 };
+
+        Blob docxBlob = createTestDocx('<w:document><w:body><w:p><w:r><w:t>{Name}</w:t></w:r></w:p></w:body></w:document>');
+        ContentVersion cv = new ContentVersion(
+            Title = 'WordTemplate',
+            PathOnClient = 'WordTemplate.docx',
+            VersionData = docxBlob,
+            IsMajorVersion = true
+        );
+        insert cv;
+        Id conDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id].ContentDocumentId;
+        ContentDocumentLink cdl = new ContentDocumentLink(
+            LinkedEntityId = tpl.Id,
+            ContentDocumentId = conDocId,
+            ShareType = 'V'
+        );
+        insert cdl;
+
+        List<Map<String, String>> recipientInputs = new List<Map<String, String>>{
+            new Map<String, String>{ 'contactId' => con1.Id },
+            new Map<String, String>{ 'contactId' => con2.Id }
+        };
+
+        Test.startTest();
+        Map<String, String> result = DocGenDocuSignController.generateAndSendWithRecipients(tpl.Id, acc.Id, recipientInputs, 'Test Subject', null);
+        Test.stopTest();
+
+        System.assertNotEquals(null, result.get('contentDocumentId'), 'Should return contentDocumentId');
+        System.assertNotEquals(null, result.get('envelopeId'), 'Should return envelopeId');
+    }
+
+    @isTest
+    static void testGenerateAndSendWithRecipients_MissingRecipient() {
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+        Account acc = new Account(Name = 'Test Account');
+        insert acc;
+
+        Blob docxBlob = createTestDocx('<w:document><w:body><w:p><w:r><w:t>{Name}</w:t></w:r></w:p></w:body></w:document>');
+        ContentVersion cv = new ContentVersion(
+            Title = 'WordTemplate',
+            PathOnClient = 'WordTemplate.docx',
+            VersionData = docxBlob,
+            IsMajorVersion = true
+        );
+        insert cv;
+        Id conDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id].ContentDocumentId;
+        ContentDocumentLink cdl = new ContentDocumentLink(
+            LinkedEntityId = tpl.Id,
+            ContentDocumentId = conDocId,
+            ShareType = 'V'
+        );
+        insert cdl;
+
+        List<Map<String, String>> recipientInputs = new List<Map<String, String>>{
+            new Map<String, String>{ 'contactId' => null }
+        };
+
+        Boolean threw = false;
+        Test.startTest();
+        try {
+            DocGenDocuSignController.generateAndSendWithRecipients(tpl.Id, acc.Id, recipientInputs, 'Test', null);
+        } catch (AuraHandledException e) {
+            threw = true;
+        }
+        Test.stopTest();
+
+        System.assert(threw, 'Should throw when recipient contact ID is missing');
+    }
+
+    @isTest
+    static void testGenerateAndSendWithRecipients_TemplateNotFound() {
+        Account acc = new Account(Name = 'Test Account');
+        insert acc;
+
+        Contact con = new Contact(FirstName = 'Test', LastName = 'User', Email = 'test@example.com', AccountId = acc.Id);
+        insert con;
+
+        List<Map<String, String>> recipientInputs = new List<Map<String, String>>{
+            new Map<String, String>{ 'contactId' => con.Id }
+        };
+
+        Boolean threw = false;
+        Test.startTest();
+        try {
+            DocGenDocuSignController.generateAndSendWithRecipients(null, acc.Id, recipientInputs, 'Test', null);
+        } catch (AuraHandledException e) {
+            threw = true;
+        }
+        Test.stopTest();
+
+        System.assert(threw, 'Should throw for null template');
+    }
 }

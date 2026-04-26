@@ -880,4 +880,56 @@ private class DocGenTests {
         Test.stopTest();
         System.assert(threw, 'Should throw for WHERE keyword injection');
     }
+
+    @isTest
+    static void testGetDocuSignEnvelopeConfigs() {
+        Test.startTest();
+        List<Map<String, String>> configs = DocGenController.getDocuSignEnvelopeConfigs('Account');
+        Test.stopTest();
+
+        System.assertNotEquals(null, configs, 'Should return a list, not null');
+        System.assertEquals(0, configs.size(), 'Should return empty list when dfsle managed package object is not available');
+    }
+
+    @isTest
+    static void testSaveTemplate_WithDocuSignFields() {
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+
+        Map<String, Object> fields = new Map<String, Object>{
+            'Id' => tpl.Id,
+            'Name' => 'Updated Name',
+            'Category__c' => 'Updated Category',
+            'Type__c' => 'Word',
+            'Base_Object_API__c' => 'Contact',
+            'Description__c' => 'Updated Desc',
+            'Query_Config__c' => 'Name',
+            'Query_Metadata__c' => '{}',
+            'Test_Record_Id__c' => '',
+            'Document_Title_Format__c' => '{Name}',
+            'DocuSign_Envelope_Configuration__c' => null,
+            'DocuSign_Signer_Count__c' => 3
+        };
+
+        Test.startTest();
+        DocGenController.saveTemplate(fields, false);
+        Test.stopTest();
+
+        DocGen_Template__c updated = [SELECT DocuSign_Envelope_Configuration__c, DocuSign_Signer_Count__c FROM DocGen_Template__c WHERE Id = :tpl.Id];
+        System.assertEquals(null, updated.DocuSign_Envelope_Configuration__c, 'Envelope config should be null');
+        System.assertEquals(3, updated.DocuSign_Signer_Count__c, 'Signer count should be saved as 3');
+    }
+
+    @isTest
+    static void testGetTemplatesForObject_IncludesDocuSignFields() {
+        DocGen_Template__c tpl = [SELECT Id, DocuSign_Signer_Count__c FROM DocGen_Template__c LIMIT 1];
+        tpl.DocuSign_Signer_Count__c = 2;
+        update tpl;
+
+        Test.startTest();
+        List<DocGen_Template__c> templates = DocGenController.getTemplatesForObject('Account');
+        Test.stopTest();
+
+        System.assertEquals(1, templates.size(), 'Should return 1 template');
+        System.assertEquals(2, templates[0].DocuSign_Signer_Count__c, 'Should include DocuSign_Signer_Count__c in result');
+    }
 }

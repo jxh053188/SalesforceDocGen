@@ -309,4 +309,195 @@ private class DocGenDocuSignServiceTest {
         System.assert(threw, 'Should throw when ContentVersion record is missing');
         System.assert(message.contains('Document ContentVersion not found'), message);
     }
+
+    @isTest
+    static void testSendDocumentWithMultipleRecipients_Success() {
+        Account acc = new Account(Name = 'Test Account');
+        insert acc;
+
+        Contact con1 = new Contact(FirstName = 'Test1', LastName = 'User1', Email = 'test1@example.com', AccountId = acc.Id);
+        Contact con2 = new Contact(FirstName = 'Test2', LastName = 'User2', Email = 'test2@example.com', AccountId = acc.Id);
+        insert new List<Contact>{ con1, con2 };
+
+        ContentVersion cv = new ContentVersion(
+            Title = 'TestDoc',
+            PathOnClient = 'TestDoc.docx',
+            VersionData = Blob.valueOf('Test'),
+            IsMajorVersion = true
+        );
+        insert cv;
+
+        Id contentDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id].ContentDocumentId;
+        cv = [SELECT Id FROM ContentVersion WHERE ContentDocumentId = :contentDocId AND IsLatest = true LIMIT 1];
+
+        List<DocGenDocuSignService.RecipientInfo> recipients = new List<DocGenDocuSignService.RecipientInfo>{
+            new DocGenDocuSignService.RecipientInfo(contactId = con1.Id, routingOrder = 1, role = 'Signer 1'),
+            new DocGenDocuSignService.RecipientInfo(contactId = con2.Id, routingOrder = 2, role = 'Signer 2')
+        };
+
+        Test.startTest();
+        String envelopeId = DocGenDocuSignService.sendDocumentForSignature(cv.Id, acc.Id, recipients, 'Test Subject');
+        Test.stopTest();
+
+        System.assertEquals('00000000-0000-0000-0000-000000000000', envelopeId, 'Should return dummy envelope ID for multiple recipients in test context');
+    }
+
+    @isTest
+    static void testSendDocumentWithEnvelopeConfig_EmailSubjectOverride() {
+        Account acc = new Account(Name = 'Test Account');
+        insert acc;
+
+        Contact con = new Contact(FirstName = 'Test', LastName = 'User', Email = 'test@example.com', AccountId = acc.Id);
+        insert con;
+
+        ContentVersion cv = new ContentVersion(
+            Title = 'TestDoc',
+            PathOnClient = 'TestDoc.docx',
+            VersionData = Blob.valueOf('Test'),
+            IsMajorVersion = true
+        );
+        insert cv;
+
+        Id contentDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id].ContentDocumentId;
+        cv = [SELECT Id FROM ContentVersion WHERE ContentDocumentId = :contentDocId AND IsLatest = true LIMIT 1];
+
+        List<DocGenDocuSignService.RecipientInfo> recipients = new List<DocGenDocuSignService.RecipientInfo>{
+            new DocGenDocuSignService.RecipientInfo(contactId = con.Id, routingOrder = 1, role = 'Signer 1')
+        };
+
+        Test.startTest();
+        // Managed package object dfsle__EnvelopeConfiguration__c is not available in test context,
+        // so resolveDefaultEmailSubject returns null and the fallback subject is used.
+        String envelopeId = DocGenDocuSignService.sendDocumentForSignature(cv.Id, acc.Id, recipients, '', acc.Id);
+        Test.stopTest();
+
+        System.assertEquals('00000000-0000-0000-0000-000000000000', envelopeId, 'Should return dummy envelope ID when envelope config is provided with blank subject');
+    }
+
+    @isTest
+    static void testSendDocumentWithEnvelopeConfig_ExplicitSubjectOverride() {
+        Account acc = new Account(Name = 'Test Account');
+        insert acc;
+
+        Contact con = new Contact(FirstName = 'Test', LastName = 'User', Email = 'test@example.com', AccountId = acc.Id);
+        insert con;
+
+        ContentVersion cv = new ContentVersion(
+            Title = 'TestDoc',
+            PathOnClient = 'TestDoc.docx',
+            VersionData = Blob.valueOf('Test'),
+            IsMajorVersion = true
+        );
+        insert cv;
+
+        Id contentDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id].ContentDocumentId;
+        cv = [SELECT Id FROM ContentVersion WHERE ContentDocumentId = :contentDocId AND IsLatest = true LIMIT 1];
+
+        List<DocGenDocuSignService.RecipientInfo> recipients = new List<DocGenDocuSignService.RecipientInfo>{
+            new DocGenDocuSignService.RecipientInfo(contactId = con.Id, routingOrder = 1, role = 'Signer 1')
+        };
+
+        Test.startTest();
+        String envelopeId = DocGenDocuSignService.sendDocumentForSignature(cv.Id, acc.Id, recipients, 'Explicit Subject', acc.Id);
+        Test.stopTest();
+
+        System.assertEquals('00000000-0000-0000-0000-000000000000', envelopeId, 'Should return dummy envelope ID when explicit subject overrides config default');
+    }
+
+    @isTest
+    static void testSendDocumentWithMultipleRecipients_MissingEmail() {
+        Account acc = new Account(Name = 'Test Account');
+        insert acc;
+
+        Contact con1 = new Contact(FirstName = 'Test1', LastName = 'User1', Email = 'test1@example.com', AccountId = acc.Id);
+        Contact con2 = new Contact(FirstName = 'Test2', LastName = 'User2', Email = null, AccountId = acc.Id);
+        insert new List<Contact>{ con1, con2 };
+
+        ContentVersion cv = new ContentVersion(
+            Title = 'TestDoc',
+            PathOnClient = 'TestDoc.docx',
+            VersionData = Blob.valueOf('Test'),
+            IsMajorVersion = true
+        );
+        insert cv;
+
+        Id contentDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id].ContentDocumentId;
+        cv = [SELECT Id FROM ContentVersion WHERE ContentDocumentId = :contentDocId AND IsLatest = true LIMIT 1];
+
+        List<DocGenDocuSignService.RecipientInfo> recipients = new List<DocGenDocuSignService.RecipientInfo>{
+            new DocGenDocuSignService.RecipientInfo(contactId = con1.Id, routingOrder = 1, role = 'Signer 1'),
+            new DocGenDocuSignService.RecipientInfo(contactId = con2.Id, routingOrder = 2, role = 'Signer 2')
+        };
+
+        Boolean threw = false;
+        String message = '';
+        Test.startTest();
+        try {
+            DocGenDocuSignService.sendDocumentForSignature(cv.Id, acc.Id, recipients, 'Test Subject');
+        } catch (DocGenException e) {
+            threw = true;
+            message = e.getMessage();
+        }
+        Test.stopTest();
+
+        System.assert(threw, 'Should throw when a recipient has no email');
+        System.assert(message.contains('valid Email address'), message);
+    }
+
+    @isTest
+    static void testSendDocumentWithMultipleRecipients_EmptyList() {
+        Account acc = new Account(Name = 'Test Account');
+        insert acc;
+
+        ContentVersion cv = new ContentVersion(
+            Title = 'TestDoc',
+            PathOnClient = 'TestDoc.docx',
+            VersionData = Blob.valueOf('Test'),
+            IsMajorVersion = true
+        );
+        insert cv;
+
+        Id contentDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id].ContentDocumentId;
+        cv = [SELECT Id FROM ContentVersion WHERE ContentDocumentId = :contentDocId AND IsLatest = true LIMIT 1];
+
+        Boolean threw = false;
+        String message = '';
+        Test.startTest();
+        try {
+            DocGenDocuSignService.sendDocumentForSignature(cv.Id, acc.Id, new List<DocGenDocuSignService.RecipientInfo>(), 'Test Subject');
+        } catch (DocGenException e) {
+            threw = true;
+            message = e.getMessage();
+        }
+        Test.stopTest();
+
+        System.assert(threw, 'Should throw when recipient list is empty and no default recipient exists');
+        System.assert(message.contains('Recipient is required'), message);
+    }
+
+    @isTest
+    static void testSendDocument_BackwardCompatibility() {
+        Account acc = new Account(Name = 'Test Account');
+        insert acc;
+
+        Contact con = new Contact(FirstName = 'Test', LastName = 'User', Email = 'test@example.com', AccountId = acc.Id);
+        insert con;
+
+        ContentVersion cv = new ContentVersion(
+            Title = 'TestDoc',
+            PathOnClient = 'TestDoc.docx',
+            VersionData = Blob.valueOf('Test'),
+            IsMajorVersion = true
+        );
+        insert cv;
+
+        Id contentDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id].ContentDocumentId;
+        cv = [SELECT Id FROM ContentVersion WHERE ContentDocumentId = :contentDocId AND IsLatest = true LIMIT 1];
+
+        Test.startTest();
+        String envelopeId = DocGenDocuSignService.sendDocumentForSignature(cv.Id, acc.Id, con.Id, 'Backward Compat Subject');
+        Test.stopTest();
+
+        System.assertEquals('00000000-0000-0000-0000-000000000000', envelopeId, 'Old single-ID signature should still work');
+    }
 }

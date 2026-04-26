@@ -56,7 +56,7 @@ Add the document generation capability to any standard or custom object record p
 
 ### 5. Native Electronic Signatures (Experience Cloud)
 - **Architecture**: A zero-cost, 100% native electronic signature engine.
-- **Experience Cloud Integration**: Leverages Screen Flows running in **System Context** to ensure guest users can sign and process documents without permission blocks.
+- **Experience Cloud Integration**: Leverages Screen Flows running in **System Mode with Sharing**, delegating privileged record access and DML to underlying Apex actions that use `WITH SYSTEM_MODE` queries and scoped `without sharing` helpers. This ensures guest users can sign documents while respecting org sharing rules.
 - **OpenXML Stamping**: Signatures are injected directly into the DOCX source file before being flattened to PDF.
 - **Tamper Evidence**: Every signed document is mathematically hashed (SHA-256), creating an immutable audit trail for non-repudiation.
 

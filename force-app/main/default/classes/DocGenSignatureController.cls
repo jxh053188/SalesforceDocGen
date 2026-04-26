@@ -177,6 +177,9 @@ public without sharing class DocGenSignatureController {
      */
     @AuraEnabled
     public static void finishSignatureUpload(String token, String base64Pdf, String fileName) {
+        if (String.isBlank(base64Pdf)) {
+            throw new AuraHandledException('PDF data is required.');
+        }
         List<DocGen_Signature_Request__c> requests = [
             SELECT Id, Related_Record_Id__c
             FROM DocGen_Signature_Request__c

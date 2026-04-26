@@ -68,11 +68,7 @@ public with sharing class DocGenDocuSignService {
             .withEmail(subject, null);
 
         if (String.isNotBlank(overrideDocuSignTemplateId)) {
-            System.debug(LoggingLevel.INFO,
-                'DocGenDocuSignService: DocuSign template override is set to '
-                + overrideDocuSignTemplateId
-                + ' but template-based sending is stubbed for a future iteration.'
-            );
+            // DocuSign template override is stubbed for a future iteration.
         }
 
         if (Test.isRunningTest()) {
@@ -89,23 +85,23 @@ public with sharing class DocGenDocuSignService {
 
     @TestVisible
     private static Id resolveDefaultRecipient(Id recordId) {
-        String sObjectType = String.valueOf(recordId.getSObjectType());
+        Schema.SObjectType recordType = recordId.getSObjectType();
 
-        if (sObjectType == 'Opportunity') {
+        if (recordType == Opportunity.SObjectType) {
             List<Opportunity> opps = [
                 SELECT ContactId FROM Opportunity WHERE Id = :recordId WITH USER_MODE LIMIT 1
             ];
             if (!opps.isEmpty() && opps[0].ContactId != null) {
                 return opps[0].ContactId;
             }
-        } else if (sObjectType == 'Contract') {
+        } else if (recordType == Contract.SObjectType) {
             List<Contract> contracts = [
                 SELECT CustomerSignedId FROM Contract WHERE Id = :recordId WITH USER_MODE LIMIT 1
             ];
             if (!contracts.isEmpty() && contracts[0].CustomerSignedId != null) {
                 return contracts[0].CustomerSignedId;
             }
-        } else if (sObjectType == 'Account') {
+        } else if (recordType == Account.SObjectType) {
             List<Account> accounts = [
                 SELECT PersonContactId, IsPersonAccount
                 FROM Account

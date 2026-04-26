@@ -13,7 +13,12 @@ public without sharing class DocGenSignatureService {
         }
 
         Blob docxBlob = cv.VersionData;
-        Blob signatureBlob = EncodingUtil.base64Decode(base64Image);
+        Blob signatureBlob;
+        try {
+            signatureBlob = EncodingUtil.base64Decode(base64Image);
+        } catch (System.StringException e) {
+            throw new SignatureException('Invalid Base64 signature image data.');
+        }
         
         Compression.ZipReader reader = new Compression.ZipReader(docxBlob);
         Compression.ZipWriter writer = new Compression.ZipWriter();
@@ -144,7 +149,9 @@ public without sharing class DocGenSignatureService {
             update req;
 
         } catch (Exception e) {
-            System.debug('DocGen: Error in signature handling: ' + e.getMessage());
+            req.Status__c = 'Error';
+            req.Error_Message__c = e.getMessage();
+            update req;
         }
     }
 }

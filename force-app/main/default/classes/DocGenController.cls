@@ -380,8 +380,6 @@ public with sharing class DocGenController {
         return parents;
     }
 
-    // Sample data creation method removed per cleanup request.
-
     // --- Template Sharing Logic ---
 
     @AuraEnabled(cacheable=false)

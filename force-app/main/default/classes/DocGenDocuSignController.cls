@@ -10,16 +10,16 @@ public with sharing class DocGenDocuSignController {
     @AuraEnabled(cacheable=true)
     public static List<Contact> getRelatedContacts(Id recordId) {
         if (recordId == null) return new List<Contact>();
-        String objectApiName = String.valueOf(recordId.getSObjectType());
+        Schema.SObjectType recordType = recordId.getSObjectType();
         Set<Id> contactIds = new Set<Id>();
 
-        if (objectApiName == 'Opportunity') {
+        if (recordType == Opportunity.SObjectType) {
             for (OpportunityContactRole ocr : [
                 SELECT ContactId FROM OpportunityContactRole WHERE OpportunityId = :recordId WITH USER_MODE
             ]) {
                 contactIds.add(ocr.ContactId);
             }
-        } else if (objectApiName == 'Account') {
+        } else if (recordType == Account.SObjectType) {
             List<Account> accounts = [
                 SELECT PersonContactId, IsPersonAccount FROM Account WHERE Id = :recordId WITH USER_MODE LIMIT 1
             ];
@@ -33,7 +33,7 @@ public with sharing class DocGenDocuSignController {
                     contactIds.add(acr.ContactId);
                 }
             }
-        } else if (objectApiName == 'Contract') {
+        } else if (recordType == Contract.SObjectType) {
             List<Contract> contracts = [
                 SELECT CustomerSignedId FROM Contract WHERE Id = :recordId WITH USER_MODE LIMIT 1
             ];

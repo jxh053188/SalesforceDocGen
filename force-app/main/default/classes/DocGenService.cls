@@ -85,12 +85,6 @@ public with sharing class DocGenService {
         return saveFile(resultBlob, docTitle, recordId, templateType);
     }
 
-    // ... (processXml etc omitted, assuming unchanged relative position) ...
-    // Wait, replacing lines 49-52 and 255-264
-    // Using multi_replace or separate calls?
-    // I can do it in two calls.
-
-    
     @TestVisible
     private static String processXml(String xml, Map<String, Object> data, Map<String, DocGen_DocuSign_Mapping__mdt> anchorMappings) {
         String output = '';

@@ -9,31 +9,31 @@ public with sharing class DocGenController {
 
     @AuraEnabled
     public static Map<String, Object> generateDocumentData(Id templateId, Id recordId) {
-        if (templateId == null) throw new DocGenException('Template ID is missing.');
-        
+        if (templateId == null) throw new AuraHandledException('Template ID is missing.');
+
         List<DocGen_Template__c> templates = [
             SELECT Base_Object_API__c, Query_Config__c, Query_Metadata__c, Type__c, Output_Format__c, Document_Title_Format__c
-            FROM DocGen_Template__c 
-            WHERE Id = :templateId 
+            FROM DocGen_Template__c
+            WHERE Id = :templateId
             WITH USER_MODE
             LIMIT 1
         ];
-        
+
         if (templates.isEmpty()) {
-            throw new DocGenException('Template not found or you do not have access.');
+            throw new AuraHandledException('Template not found or you do not have access.');
         }
         DocGen_Template__c template = templates[0];
-        
+
         Map<String, Object> recordData = DocGenDataRetriever.getRecordData(
-            recordId, 
-            template.Base_Object_API__c, 
+            recordId,
+            template.Base_Object_API__c,
             template.Query_Config__c
         );
-        
+
         String fileContent = DocGenTemplateManager.getTemplateFileContent(templateId);
-        
+
         if (recordData == null) {
-            throw new DocGenException('Record data not found.');
+            throw new AuraHandledException('Record data not found.');
         }
 
         return new Map<String, Object>{
@@ -77,7 +77,7 @@ public with sharing class DocGenController {
         }
 
         if (!FeatureManagement.checkPermission('DocGen_Administrator')) {
-            throw new DocGenException('Insufficient privileges: DocGen Administrator permission required.');
+            throw new AuraHandledException('Insufficient privileges: DocGen Administrator permission required.');
         }
 
         try {

@@ -44,7 +44,6 @@ public with sharing class DocGenSignatureController {
      * @description Called by the LWC upon load to verify the token is valid and hasn't been signed.
      */
     @AuraEnabled
-    @RemoteAction
     public static SignatureInitResponse validateToken(String token) {
         SignatureInitResponse res = new SignatureInitResponse();
         res.isValid = false;
@@ -209,7 +208,7 @@ public with sharing class DocGenSignatureController {
             if (!audits.isEmpty()) {
                 String pdfHash = EncodingUtil.convertToHex(Crypto.generateDigest('SHA-256', EncodingUtil.base64Decode(base64Pdf)));
                 audits[0].Document_Hash_SHA256__c = pdfHash;
-                update audits;
+                SystemModeHelper.updateSignatureAudit(audits);
             }
         } catch (Exception e) {
             throw new AuraHandledException('Finalization failed: ' + e.getMessage());
@@ -219,6 +218,7 @@ public with sharing class DocGenSignatureController {
     private without sharing class SystemModeHelper {
         static void updateSignatureRequest(DocGen_Signature_Request__c req) { update req; }
         static void insertSignatureAudit(DocGen_Signature_Audit__c audit) { insert audit; }
+        static void updateSignatureAudit(List<DocGen_Signature_Audit__c> audits) { update audits; }
         static void insertContentDistribution(ContentDistribution cd) { insert cd; }
         static Id saveGeneratedDocument(Id recordId, String fileName, String base64Data, String extension) {
             ContentVersion cv = new ContentVersion();

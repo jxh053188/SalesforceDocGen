@@ -1,7 +1,7 @@
 @isTest
 private class DocGenTests {
 
-    @testSetup
+    @TestSetup
     static void setup() {
         DocGen_Template__c tpl = new DocGen_Template__c(
             Name = 'Test Template',

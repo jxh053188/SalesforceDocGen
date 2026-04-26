@@ -148,7 +148,7 @@ public with sharing class DocGenSignatureService {
             update req;
 
         } catch (Exception e) {
-            System.debug('DocGen: Error in signature handling: ' + e.getMessage());
+            // Intentionally swallow to prevent Flow failure; consider logging to a custom error object
         }
     }
 }

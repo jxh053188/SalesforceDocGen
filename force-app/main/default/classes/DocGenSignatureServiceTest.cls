@@ -54,8 +54,9 @@ private class DocGenSignatureServiceTest {
         ContentVersion newCv = [SELECT Id, Title, ContentDocumentId FROM ContentVersion WHERE Id = :newCvId];
         System.assert(newCv.Title.contains('Signed'), 'Title should contain Signed');
 
-        List<ContentDocumentLink> links = [SELECT Id FROM ContentDocumentLink WHERE LinkedEntityId = :acc.Id];
+        List<ContentDocumentLink> links = [SELECT Id, Visibility FROM ContentDocumentLink WHERE LinkedEntityId = :acc.Id];
         System.assertEquals(1, links.size(), 'Should be linked to account');
+        System.assertEquals('InternalUsers', links[0].Visibility, 'Visibility should be restricted to InternalUsers');
     }
 
     @isTest
@@ -86,6 +87,11 @@ private class DocGenSignatureServiceTest {
         List<DocGen_Signature_Audit__c> audits = [SELECT Id, Document_Hash_SHA256__c FROM DocGen_Signature_Audit__c WHERE Signature_Request__c = :req.Id];
         System.assertEquals(1, audits.size(), 'Audit should be created');
         System.assertNotEquals(null, audits[0].Document_Hash_SHA256__c, 'Hash should be populated');
+
+        Id signedDocId = Id.valueOf(audits[0].Document_Hash_SHA256__c);
+        List<ContentDocumentLink> links = [SELECT Id, Visibility FROM ContentDocumentLink WHERE ContentDocumentId = :signedDocId AND LinkedEntityId = :acc.Id];
+        System.assertEquals(1, links.size(), 'Document should be linked to account');
+        System.assertEquals('InternalUsers', links[0].Visibility, 'Visibility should be restricted to InternalUsers');
     }
 
     @isTest

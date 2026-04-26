@@ -275,4 +275,38 @@ private class DocGenDocuSignServiceTest {
 
         System.assertEquals(null, resolvedId, 'Should return null when Contract has no CustomerSignedId');
     }
+
+    @isTest
+    static void testResolveDefaultRecipient_Null() {
+        Test.startTest();
+        Id resolvedId = DocGenDocuSignService.resolveDefaultRecipient(null);
+        Test.stopTest();
+
+        System.assertEquals(null, resolvedId, 'Should return null when recordId is null');
+    }
+
+    @isTest
+    static void testSendDocumentForSignature_MissingContentVersionRecord() {
+        Account acc = new Account(Name = 'Test Account');
+        insert acc;
+
+        Contact con = new Contact(FirstName = 'Test', LastName = 'User', Email = 'test@example.com', AccountId = acc.Id);
+        insert con;
+
+        Id fakeCvId = '068000000000000';
+
+        Boolean threw = false;
+        String message = '';
+        Test.startTest();
+        try {
+            DocGenDocuSignService.sendDocumentForSignature(fakeCvId, acc.Id, con.Id, 'Test Subject');
+        } catch (DocGenException e) {
+            threw = true;
+            message = e.getMessage();
+        }
+        Test.stopTest();
+
+        System.assert(threw, 'Should throw when ContentVersion record is missing');
+        System.assert(message.contains('Document ContentVersion not found'), message);
+    }
 }

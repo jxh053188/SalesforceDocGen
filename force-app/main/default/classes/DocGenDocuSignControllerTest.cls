@@ -213,6 +213,15 @@ private class DocGenDocuSignControllerTest {
         System.assert(threw, 'Should throw exception for HTML template');
     }
 
+    @isTest
+    static void testGetRelatedContacts_Null() {
+        Test.startTest();
+        List<Contact> contacts = DocGenDocuSignController.getRelatedContacts(null);
+        Test.stopTest();
+
+        System.assertEquals(0, contacts.size(), 'Should return empty list for null recordId');
+    }
+
     private static Blob createTestDocx(String documentXml) {
         Compression.ZipWriter writer = new Compression.ZipWriter();
         writer.addEntry('word/document.xml', Blob.valueOf(documentXml));

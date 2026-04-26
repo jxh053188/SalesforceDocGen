@@ -366,9 +366,7 @@ private class DocGenDocuSignServiceTest {
         };
 
         Test.startTest();
-        // Managed package object dfsle__EnvelopeConfiguration__c is not available in test context,
-        // so resolveDefaultEmailSubject returns null and the fallback subject is used.
-        String envelopeId = DocGenDocuSignService.sendDocumentForSignature(cv.Id, acc.Id, recipients, '', acc.Id);
+        String envelopeId = DocGenDocuSignService.sendDocumentForSignature(cv.Id, acc.Id, recipients, '');
         Test.stopTest();
 
         System.assertEquals('00000000-0000-0000-0000-000000000000', envelopeId, 'Should return dummy envelope ID when envelope config is provided with blank subject');
@@ -398,7 +396,7 @@ private class DocGenDocuSignServiceTest {
         };
 
         Test.startTest();
-        String envelopeId = DocGenDocuSignService.sendDocumentForSignature(cv.Id, acc.Id, recipients, 'Explicit Subject', acc.Id);
+        String envelopeId = DocGenDocuSignService.sendDocumentForSignature(cv.Id, acc.Id, recipients, 'Explicit Subject');
         Test.stopTest();
 
         System.assertEquals('00000000-0000-0000-0000-000000000000', envelopeId, 'Should return dummy envelope ID when explicit subject overrides config default');

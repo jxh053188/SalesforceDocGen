@@ -267,7 +267,7 @@ private class DocGenDocuSignControllerTest {
         };
 
         Test.startTest();
-        Map<String, String> result = DocGenDocuSignController.generateAndSendWithRecipients(tpl.Id, acc.Id, recipientInputs, 'Test Subject', null);
+        Map<String, String> result = DocGenDocuSignController.generateAndSendWithRecipients(tpl.Id, acc.Id, recipientInputs, 'Test Subject');
         Test.stopTest();
 
         System.assertNotEquals(null, result.get('contentDocumentId'), 'Should return contentDocumentId');
@@ -303,7 +303,7 @@ private class DocGenDocuSignControllerTest {
         Boolean threw = false;
         Test.startTest();
         try {
-            DocGenDocuSignController.generateAndSendWithRecipients(tpl.Id, acc.Id, recipientInputs, 'Test', null);
+            DocGenDocuSignController.generateAndSendWithRecipients(tpl.Id, acc.Id, recipientInputs, 'Test');
         } catch (AuraHandledException e) {
             threw = true;
         }
@@ -327,7 +327,7 @@ private class DocGenDocuSignControllerTest {
         Boolean threw = false;
         Test.startTest();
         try {
-            DocGenDocuSignController.generateAndSendWithRecipients(null, acc.Id, recipientInputs, 'Test', null);
+            DocGenDocuSignController.generateAndSendWithRecipients(null, acc.Id, recipientInputs, 'Test');
         } catch (AuraHandledException e) {
             threw = true;
         }

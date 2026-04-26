@@ -81,7 +81,7 @@ public with sharing class DocGenSignatureController {
         // Update status to Viewed if it was merely Sent
         if (req.Status__c == 'Sent') {
             req.Status__c = 'Viewed';
-            SystemModeHelper.updateSignatureRequest(req);
+            new SystemModeHelper().updateSignatureRequest(req);
         }
 
         res.isValid = true;
@@ -110,7 +110,7 @@ public with sharing class DocGenSignatureController {
                 cd.PreferencesAllowViewInBrowser = true;
                 cd.PreferencesLinkLatestVersion = true;
                 cd.PreferencesExpires = false;
-                SystemModeHelper.insertContentDistribution(cd);
+                new SystemModeHelper().insertContentDistribution(cd);
                 
                 cd = [SELECT DistributionPublicUrl FROM ContentDistribution WHERE Id = :cd.Id WITH SYSTEM_MODE LIMIT 1];
                 res.documentUrl = cd.DistributionPublicUrl;
@@ -151,7 +151,7 @@ public with sharing class DocGenSignatureController {
             
             // 3. Mark as signed (Update Request Status)
             req.Status__c = 'Signed';
-            SystemModeHelper.updateSignatureRequest(req);
+            new SystemModeHelper().updateSignatureRequest(req);
 
             // 4. Create Audit Trail (Initial State)
             DocGen_Signature_Audit__c audit = new DocGen_Signature_Audit__c();
@@ -160,7 +160,7 @@ public with sharing class DocGenSignatureController {
             audit.Document_Hash_SHA256__c = 'PENDING_CLIENT_PDF'; // Will be updated by finishSignatureUpload
             audit.IP_Address__c = 'Captured via Client-Side Hybrid Flow';
             audit.User_Agent__c = 'Browser-Based Renderer';
-            SystemModeHelper.insertSignatureAudit(audit);
+            new SystemModeHelper().insertSignatureAudit(audit);
 
             return new Map<String, String>{
                 'base64' => EncodingUtil.base64Encode(stampedBlob),
@@ -189,7 +189,7 @@ public with sharing class DocGenSignatureController {
 
         try {
             // 1. Save PDF
-            Id contentDocId = SystemModeHelper.saveGeneratedDocument(
+            Id contentDocId = new SystemModeHelper().saveGeneratedDocument(
                 req.Related_Record_Id__c,
                 fileName,
                 base64Pdf,
@@ -208,7 +208,7 @@ public with sharing class DocGenSignatureController {
             if (!audits.isEmpty()) {
                 String pdfHash = EncodingUtil.convertToHex(Crypto.generateDigest('SHA-256', EncodingUtil.base64Decode(base64Pdf)));
                 audits[0].Document_Hash_SHA256__c = pdfHash;
-                SystemModeHelper.updateSignatureAudit(audits);
+                new SystemModeHelper().updateSignatureAudit(audits);
             }
         } catch (Exception e) {
             throw new AuraHandledException('Finalization failed: ' + e.getMessage());
@@ -216,11 +216,11 @@ public with sharing class DocGenSignatureController {
     }
 
     private without sharing class SystemModeHelper {
-        static void updateSignatureRequest(DocGen_Signature_Request__c req) { update req; }
-        static void insertSignatureAudit(DocGen_Signature_Audit__c audit) { insert audit; }
-        static void updateSignatureAudit(List<DocGen_Signature_Audit__c> audits) { update audits; }
-        static void insertContentDistribution(ContentDistribution cd) { insert cd; }
-        static Id saveGeneratedDocument(Id recordId, String fileName, String base64Data, String extension) {
+        void updateSignatureRequest(DocGen_Signature_Request__c req) { update req; }
+        void insertSignatureAudit(DocGen_Signature_Audit__c audit) { insert audit; }
+        void updateSignatureAudit(List<DocGen_Signature_Audit__c> audits) { update audits; }
+        void insertContentDistribution(ContentDistribution cd) { insert cd; }
+        Id saveGeneratedDocument(Id recordId, String fileName, String base64Data, String extension) {
             ContentVersion cv = new ContentVersion();
             cv.Title = fileName;
             cv.PathOnClient = fileName + (extension.startsWith('.') ? extension : '.' + extension);
